@@ -9,6 +9,10 @@ import lua from "./languages/lua.js";
 
 const dialogFilters = [
     {
+        extensions: ["lua"],
+        name: "Lua",
+    },
+    {
         extensions: ["js", "cjs", "mjs", "es6", "pac"],
         name: "JavaScript",
     },

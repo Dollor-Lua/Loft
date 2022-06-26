@@ -4,6 +4,11 @@ const { appWindow } = window.__TAURI__.window;
 // imports
 import build from "./pheonix/pheonix.js";
 
+var term = new Terminal();
+
+term.open(document.getElementById("terminal"));
+term.write("Hello from \x1B[1;3;31mxterm.js\x1B[0m $ ");
+
 const title = document.getElementById("title");
 const container = document.getElementById("container");
 const close = document.getElementById("close");
@@ -34,7 +39,4 @@ appWindow.listen("tauri://resize", () => {
 });
 
 const editor = build(container, "./javascript/pheonix");
-editor.set(
-    "Select a language (button in bottom right) to get started.\nStart typing to dismiss this message.",
-    true
-);
+editor.set("Select a language (button in bottom right) to get started.\nStart typing to dismiss this message.", true);
