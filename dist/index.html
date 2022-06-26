@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <link rel="stylesheet" href="./css/dark.css" />
+        <link rel="stylesheet" href="./css/main.css" />
+        <script type="module" src="./javascript/uihandler.js" defer></script>
+        <script type="module" src="./javascript/main.js" defer></script>
+        <meta http-equiv="Content-Type" content="text/html;charset=UTF-8" />
+    </head>
+
+    <body>
+        <div id="precontainer">
+            <div id="container"></div>
+            <div id="console"></div>
+            <div id="explorer"></div>
+        </div>
+        <div id="toolbar">
+            <p id="title">Loft - Untitled</p>
+            <div id="dragger" data-tauri-drag-region></div>
+            <div id="dropdown"></div>
+            <button id="minimize"><img src="./resources/minimize.png" alt="-" /></button>
+            <button id="maximize"><img src="./resources/maximize_1.png" alt="[]" /></button>
+            <button id="close"><img src="./resources/close.png" alt="X" /></button>
+        </div>
+        <div id="info-bar">
+            <div class="left-items">
+                <div id="editor.current_buffer">• Untitled</div>
+                <div id="editor.errors">X0, !0</div>
+                <div id="editor.buffers">Buffers: 1</div>
+            </div>
+            <div class="right-items">
+                <div id="editor.select">Ln 0, Col 0</div>
+                <button id="editor.mode">plaintext</button>
+            </div>
+        </div>
+    </body>
+</html>

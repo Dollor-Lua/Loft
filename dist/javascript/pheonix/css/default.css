@@ -1,0 +1,11 @@
+.disabled {
+    display: none !important;
+}
+
+.disabled-t {
+    background-color: #0000 !important;
+}
+
+span {
+    white-space: pre;
+}
