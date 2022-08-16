@@ -3,6 +3,7 @@
     --hint-color: #969696;
     --background-primary: #16161c;
     --background-editor: #1f2029;
+    --background-command-palette: #2f313d;
     --border: 1px solid #16161c;
     --border-color: #16161c;
     --image-color: invert(0%);
@@ -13,7 +14,13 @@
 
 .pheonix-operator,
 .pheonix-method {
-    color: #7e8cdd !important;
+    color: #adb7eb !important;
+}
+
+.pheonix-main {
+    color: #adebeb !important;
+    font-style: italic !important;
+    font-weight: bold !important;
 }
 
 .pheonix-attribute {
@@ -30,8 +37,13 @@
 
 .pheonix-string {
     color: #67be56 !important;
+    font-style: italic !important;
 }
 
 .pheonix-comment {
-    color: #33354b !important;
+    color: #3a3c4e !important;
+}
+
+.pheonix-macro {
+    color: #ee4836 !important;
 }

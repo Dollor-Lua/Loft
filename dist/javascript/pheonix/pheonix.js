@@ -3,10 +3,19 @@ const { dialog, fs, clipboard } = window.__TAURI__;
 
 // imports
 import { generate } from "./generator.js";
+import languages from "./langs.js";
+import fuzzysort from "./external/fuzzysort.js";
 
 // languages
-import lua from "./languages/lua.js";
+var syntaxCache = {};
+var paletteLangs = [];
+var highlight = null;
+(async () => {
+    highlight = (await import("./languages/plaintext.js")).default;
+})();
 
+// dialog filters
+// TODO: make automatic
 const dialogFilters = [
     {
         extensions: ["lua"],
@@ -26,10 +35,19 @@ const dialogFilters = [
     },
 ];
 
+// basic variables
 var selected = null;
+var paletteOpen = false;
+var currentMode = "plaintext";
+var lastMode = "plaintext";
+
+var allowbindings = true;
+
+const paletteManager = new EventTarget();
 
 const fontHeight = 24;
 
+// functions
 var updated = false;
 var cursor_blink = setInterval(() => {
     if (updated) {
@@ -45,6 +63,156 @@ var cursor_blink = setInterval(() => {
         }
     }
 }, 500);
+
+var paletteholder = null;
+
+var signalpalette = null;
+var incpalette = null;
+var deincpalette = null;
+export function closePalette() {
+    paletteOpen = false;
+    allowbindings = true;
+    paletteManager.removeEventListener("signal", signalpalette);
+    paletteManager.removeEventListener("increment", incpalette);
+    paletteManager.removeEventListener("deincrement", deincpalette);
+
+    if (paletteholder) {
+        paletteholder.palette.classList.add("disabled");
+        paletteholder.paletteSearch.blur();
+        selected = paletteholder;
+    }
+}
+
+/*
+ * openPalette(mode)
+ * mode ->
+ *  - language
+ *  - command
+ *  - array of dictionaries
+ *     ex: [
+ *       { name: "option 1", callback: () => {} }
+ *     ]
+ */
+export function openPalette(mode, select = selected) {
+    paletteOpen = true;
+    allowbindings = false;
+
+    paletteholder = select;
+    if (select == selected) selected = null;
+    paletteholder.palette.classList.remove("disabled");
+    paletteholder.paletteSearch.value = "";
+
+    var arr = mode;
+
+    if (typeof mode == "string") {
+        if (mode == "language") {
+            arr = paletteLangs;
+            paletteholder.paletteSearch.placeholder = "Select Language Mode";
+        } else if (mode == "command") {
+            console.log("OPEN PALLETE W/ COMMAND");
+            paletteholder.paletteSearch.placeholder = "Search by Command Name";
+        }
+    }
+
+    paletteholder.paletteSearch.focus();
+
+    var btns = [];
+    var selected = 0;
+
+    const updselect = () => {
+        for (var i = 0; i < btns.length; i++) {
+            btns[i].classList.remove("select");
+            if (i == selected) {
+                btns[i].classList.add("select");
+            }
+        }
+    };
+
+    signalpalette = (_) => {
+        if (btns[selected]) btns[selected].click();
+    };
+
+    incpalette = (_) => {
+        selected = Math.min(selected + 1, btns.length - 1);
+        updselect();
+    };
+
+    deincpalette = (_) => {
+        selected = Math.max(selected - 1, 0);
+        updselect();
+    };
+
+    paletteManager.addEventListener("signal", signalpalette);
+    paletteManager.addEventListener("increment", incpalette);
+    paletteManager.addEventListener("deincrement", deincpalette);
+
+    const sort = (text) => {
+        selected = 0;
+
+        const hstart = `<p style="color: #00ffff; display: inline;"><b>`;
+        const hend = `</b></p>`;
+
+        const scores = fuzzysort.go(text, arr, { limit: 15, keys: ["name", "identifier"] });
+
+        const genbtn = (html, htmlDesc = undefined) => {
+            const btn = document.createElement("button");
+            btn.style =
+                "width: 100%; height: 20px; margin-bottom: 5px; background-color: #00000022; border: none; outline: none; color: #fff; font-size: 1.2rem; text-align: left;";
+            btn.innerHTML = html;
+
+            if (htmlDesc != undefined) {
+                const dtxt = document.createElement("p");
+                dtxt.style = "display: inline; font-size: 0.85rem; color: #777; padding-left: 5px;";
+                dtxt.innerHTML = `(${htmlDesc})`;
+                btn.appendChild(dtxt);
+            }
+
+            return btn;
+        };
+
+        paletteholder.paletteContainer.innerHTML = "";
+        btns = [];
+        for (var i = 0; i < scores.length; i++) {
+            const btn = genbtn(
+                fuzzysort.highlight(scores[i][0], hstart, hend),
+                mode == "language" ? fuzzysort.highlight(scores[i][1], hstart, hend) : undefined
+            );
+
+            btns.push(btn);
+
+            paletteholder.paletteContainer.appendChild(btn);
+
+            const identifier = mode == "language" ? scores[i].obj.identifier : null;
+            const name = scores[i].obj.name;
+
+            btn.onclick = (_) => {
+                if (mode == "language") currentMode = identifier;
+                closePalette();
+                updateLang();
+            };
+        }
+
+        updselect();
+    };
+
+    sort("");
+    paletteholder.paletteSearch.oninput = function () {
+        sort(paletteholder.paletteSearch.value);
+    };
+}
+
+export async function updateLang() {
+    mode.innerText = currentMode;
+    if (lastMode != currentMode) {
+        if (currentMode in syntaxCache) highlight = syntaxCache[currentMode];
+        else {
+            highlight = (await import(`./languages/${currentMode}.js`)).default;
+            syntaxCache[currentMode] = highlight;
+        }
+    }
+    lastMode = currentMode;
+    update(selected);
+}
 
 export function getPositionFromLineAndChar(text, line, char) {
     var total = 0;
@@ -116,6 +284,7 @@ export function cap(fallback = null) {
 const title = document.getElementById("title");
 const cbuffer = document.getElementById("editor.current_buffer");
 const linenum = document.getElementById("editor.select");
+const mode = document.getElementById("editor.mode");
 
 export function getcharwidth() {
     const exspan = document.createElement("span");
@@ -129,6 +298,8 @@ export function getcharwidth() {
 }
 
 export function update($) {
+    if (!$) return;
+
     const width = getcharwidth();
 
     const editor = $.editor;
@@ -161,7 +332,7 @@ export function update($) {
         lined.style = `width: 100%; height: ${fontHeight}px; position: absolute; top: ${l * fontHeight}px; user-select: none;`;
         lined.setAttribute("pheonix-line-num", `${l}`);
 
-        const lineContentsPre = preview ? { highlights: [{ type: "text", text: line }] } : lua(line, lineContinues);
+        const lineContentsPre = preview ? { highlights: [{ type: "text", text: line }] } : highlight(line, lineContinues, l == 0 ? true : false);
         const lineContents = lineContentsPre.highlights;
         lineContinues = lineContentsPre.continue;
 
@@ -271,282 +442,324 @@ export function update($) {
     }
 }
 
-document.addEventListener("keydown", async function (e) {
-    if (selected) {
-        if (e.getModifierState("Control") || e.getModifierState("Meta")) {
-            if (e.key.toLowerCase() == "s") {
-                if (selected != null) {
-                    if (selected.file.trim() != "") {
-                        if (selected.presave != selected.text) {
-                            fs.writeFile({
-                                contents: selected.text,
-                                path: selected.file.trim(),
-                            });
-                            selected.presave = selected.text;
-                        }
-                    } else {
-                        dialog.save({ title: "Save As", filters: dialogFilters }).then((path) => {
-                            fs.writeFile({ contents: selected.text, path: path });
-                            selected.presave = selected.text;
-                        });
-                    }
+// f-acceleratorPushed(keyboard event)
+//      > null (no return)
+// when control is held and a key is pushed
+// this function is called for checking
+// if a keybind is triggerable.
+async function acceleratorPushed(e) {
+    if (e.key.toLowerCase() == "s") {
+        if (selected != null) {
+            if (selected.file.trim() != "") {
+                if (selected.presave != selected.text) {
+                    fs.writeFile({
+                        contents: selected.text,
+                        path: selected.file.trim(),
+                    });
+                    selected.presave = selected.text;
                 }
-            } else if (e.key.toLowerCase() == "a") {
-                if (selected != null) {
-                    const split = selected.text.split("\n");
-                    selected.c_char = 0;
-                    selected.c_line = 0;
-                    selected.c_char_end = split[split.length - 1].length;
-                    selected.c_line_end = split.length - 1;
-                    selected.c_selecting = true;
-                }
-            } else if (e.key.toLowerCase() == "c") {
-                if (selected.c_selecting) {
-                    const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
-                    const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
-                    await clipboard.writeText(selected.text.substring(Math.min(lnp1, lnp2), Math.max(lnp1, lnp2)));
-                    selected.c_selecting = false;
-                } else {
-                    await clipboard.writeText(selected.text.split("\n")[selected.c_line] + "\n");
-                }
-                cap();
-            } else if (e.key.toLowerCase() == "x") {
-                selected.history.push(selected.text, "cut", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
-                if (selected.c_selecting) {
-                    const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
-                    const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
-                    await clipboard.writeText(selected.text.substring(Math.min(lnp1, lnp2), Math.max(lnp1, lnp2)));
-                    selected.text = selected.text.substring(0, Math.min(lnp1, lnp2)) + selected.text.substring(Math.max(lnp1, lnp2));
-                    selected.c_selecting = false;
-                } else {
-                    await clipboard.writeText(selected.text.split("\n")[selected.c_line] + "\n");
-                    const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, 0);
-                    const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.text.split("\n")[selected.c_line].length + 1);
-                    selected.text = selected.text.substring(0, lnp1) + selected.text.substring(lnp2);
-                }
-                cap();
-            } else if (e.key.toLowerCase() == "v") {
-                const read = await clipboard.readText();
-                if (read != null) {
-                    selected.history.push(selected.text, "paste", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
-                    if (selected.c_selecting) {
-                        const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
-                        const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
+            } else {
+                dialog.save({ title: "Save As", filters: dialogFilters }).then((path) => {
+                    fs.writeFile({ contents: selected.text, path: path });
+                    selected.presave = selected.text;
+                });
+            }
+        }
+    } else if (e.key.toLowerCase() == "a") {
+        if (selected != null) {
+            const split = selected.text.split("\n");
+            selected.c_char = 0;
+            selected.c_line = 0;
+            selected.c_char_end = split[split.length - 1].length;
+            selected.c_line_end = split.length - 1;
+            selected.c_selecting = true;
+        }
+    } else if (e.key.toLowerCase() == "c") {
+        if (selected.c_selecting) {
+            const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
+            const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
+            await clipboard.writeText(selected.text.substring(Math.min(lnp1, lnp2), Math.max(lnp1, lnp2)));
+            selected.c_selecting = false;
+        } else {
+            await clipboard.writeText(selected.text.split("\n")[selected.c_line] + "\n");
+        }
+        cap();
+    } else if (e.key.toLowerCase() == "x") {
+        selected.history.push(selected.text, "cut", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
+        if (selected.c_selecting) {
+            const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
+            const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
+            await clipboard.writeText(selected.text.substring(Math.min(lnp1, lnp2), Math.max(lnp1, lnp2)));
+            selected.text = selected.text.substring(0, Math.min(lnp1, lnp2)) + selected.text.substring(Math.max(lnp1, lnp2));
+            selected.c_selecting = false;
+        } else {
+            await clipboard.writeText(selected.text.split("\n")[selected.c_line] + "\n");
+            const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, 0);
+            const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.text.split("\n")[selected.c_line].length + 1);
+            selected.text = selected.text.substring(0, lnp1) + selected.text.substring(lnp2);
+        }
+        cap();
+    } else if (e.key.toLowerCase() == "v") {
+        const read = await clipboard.readText();
+        if (read != null) {
+            selected.history.push(selected.text, "paste", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
+            if (selected.c_selecting) {
+                const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
+                const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
 
-                        selected.text = selected.text.substring(0, Math.min(lnp1, lnp2)) + read + selected.text.substring(Math.max(lnp1, lnp2));
-                        selected.c_line = Math.min(selected.c_line, selected.c_line_end);
-                        selected.c_char = Math.min(selected.c_char, selected.c_char_end) + read.length;
-                    } else {
-                        const toadd = selected.text.split("\n");
-                        var add = 0;
-                        for (var i = 0; i < selected.c_line; i++) add += toadd[i].length + 1;
-                        selected.text = selected.text.substring(0, add + selected.c_char) + read + selected.text.substring(add + selected.c_char);
-                        selected.c_char += read.length;
-                    }
-                }
-                cap();
-            } else if (e.key.toLowerCase() == "p") {
-                // show command palette
-            } else if (e.key.toLowerCase() == "z") {
-                if (e.getModifierState("Shift")) {
-                    const content = selected.history.redo();
-                    if (content) {
-                        selected.text = content.text;
-                        selected.c_line = content.line;
-                        selected.c_char = content.char;
-                        selected.c_line_end = content.line_end;
-                        selected.c_char_end = content.char_end;
-                    }
-                } else {
-                    const content = selected.history.undo();
-                    if (content) {
-                        selected.text = content.text;
-                        selected.c_line = content.line;
-                        selected.c_char = content.char;
-                        selected.c_line_end = content.line_end;
-                        selected.c_char_end = content.char_end;
-                    }
-                }
-            } else if (e.key.toLowerCase() == "y") {
-                const content = selected.history.redo();
-                if (content) {
-                    selected.text = content.text;
-                    selected.c_line = content.line;
-                    selected.c_char = content.char;
-                    selected.c_line_end = content.line_end;
-                    selected.c_char_end = content.char_end;
-                }
+                selected.text = selected.text.substring(0, Math.min(lnp1, lnp2)) + read + selected.text.substring(Math.max(lnp1, lnp2));
+                selected.c_line = Math.min(selected.c_line, selected.c_line_end);
+                selected.c_char = Math.min(selected.c_char, selected.c_char_end) + read.length;
+            } else {
+                const toadd = selected.text.split("\n");
+                var add = 0;
+                for (var i = 0; i < selected.c_line; i++) add += toadd[i].length + 1;
+                selected.text = selected.text.substring(0, add + selected.c_char) + read + selected.text.substring(add + selected.c_char);
+                selected.c_char += read.length;
+            }
+        }
+        cap();
+    } else if (e.key.toLowerCase() == "p") {
+        e.preventDefault();
+        openPalette("command");
+    } else if (e.key.toLowerCase() == "l") {
+        e.preventDefault();
+        openPalette("language");
+    } else if (e.key.toLowerCase() == "z") {
+        if (e.getModifierState("Shift")) {
+            const content = selected.history.redo();
+            if (content) {
+                selected.text = content.text;
+                selected.c_line = content.line;
+                selected.c_char = content.char;
+                selected.c_line_end = content.line_end;
+                selected.c_char_end = content.char_end;
+            }
+        } else {
+            const content = selected.history.undo();
+            if (content) {
+                selected.text = content.text;
+                selected.c_line = content.line;
+                selected.c_char = content.char;
+                selected.c_line_end = content.line_end;
+                selected.c_char_end = content.char_end;
+            }
+        }
+    } else if (e.key.toLowerCase() == "y") {
+        const content = selected.history.redo();
+        if (content) {
+            selected.text = content.text;
+            selected.c_line = content.line;
+            selected.c_char = content.char;
+            selected.c_line_end = content.line_end;
+            selected.c_char_end = content.char_end;
+        }
+    }
+
+    update(selected);
+}
+
+document.addEventListener("keydown", async function (e) {
+    if (paletteOpen) {
+        if (e.key == "Escape") closePalette();
+        else if (e.key == "Enter") paletteManager.dispatchEvent(new Event("signal"));
+        else if (e.key == "ArrowDown") paletteManager.dispatchEvent(new Event("increment"));
+        else if (e.key == "ArrowUp") paletteManager.dispatchEvent(new Event("deincrement"));
+        return;
+    }
+
+    if (!allowbindings) return;
+
+    if (e.getModifierState("Control") || e.getModifierState("Meta")) {
+        // Acceleration keybinds
+        // Allows for advanced keybinds
+
+        e.preventDefault();
+        acceleratorPushed(e);
+        return;
+    } else if (e.getModifierState("Shift")) {
+        // Shift Acceleration
+        // Allows for alternative keybinds using Shift+Key
+
+        if (e.key == "ArrowLeft") {
+            if (!selected.c_selecting) {
+                selected.c_selecting = true;
+                selected.c_char_end = selected.c_char;
+                selected.c_line_end = selected.c_line;
+            }
+
+            selected.c_char_end--;
+            cap(selected.text.split("\n")[selected.c_line_end - 1] ? selected.text.split("\n")[selected.c_line_end - 1].length : 0);
+            update(selected);
+            return;
+        } else if (e.key == "ArrowRight") {
+            if (!selected.c_selecting) {
+                selected.c_selecting = true;
+                selected.c_char_end = selected.c_char;
+                selected.c_line_end = selected.c_line;
+            }
+
+            selected.c_char_end++;
+            cap();
+            update(selected);
+            return;
+        } else if (e.key == "ArrowDown") {
+            if (!selected.c_selecting) {
+                selected.c_selecting = true;
+                selected.c_char_end = selected.c_char;
+                selected.c_line_end = selected.c_line;
+            }
+
+            if (selected.c_line_end < selected.text.split("\n").length - 1) {
+                selected.c_line_end++;
+                selected.c_char_end = Math.min(selected.text.split("\n")[selected.c_line_end].length, selected.c_char_end);
+            } else {
+                selected.c_char_end = selected.text.split("\n")[selected.c_line_end].length;
             }
             update(selected);
             return;
-        } else if (e.getModifierState("Shift")) {
-            if (e.key == "ArrowLeft") {
-                if (!selected.c_selecting) {
-                    selected.c_selecting = true;
-                    selected.c_char_end = selected.c_char;
-                    selected.c_line_end = selected.c_line;
-                }
-
-                selected.c_char_end--;
-                cap(selected.text.split("\n")[selected.c_line_end - 1] ? selected.text.split("\n")[selected.c_line_end - 1].length : 0);
-                update(selected);
-                return;
-            } else if (e.key == "ArrowRight") {
-                if (!selected.c_selecting) {
-                    selected.c_selecting = true;
-                    selected.c_char_end = selected.c_char;
-                    selected.c_line_end = selected.c_line;
-                }
-
-                selected.c_char_end++;
-                cap();
-                update(selected);
-                return;
-            } else if (e.key == "ArrowDown") {
-                if (!selected.c_selecting) {
-                    selected.c_selecting = true;
-                    selected.c_char_end = selected.c_char;
-                    selected.c_line_end = selected.c_line;
-                }
-
-                if (selected.c_line_end < selected.text.split("\n").length - 1) {
-                    selected.c_line_end++;
-                    selected.c_char_end = Math.min(selected.text.split("\n")[selected.c_line_end].length, selected.c_char_end);
-                } else {
-                    selected.c_char_end = selected.text.split("\n")[selected.c_line_end].length;
-                }
-                update(selected);
-                return;
-            } else if (e.key == "ArrowUp") {
-                if (!selected.c_selecting) {
-                    selected.c_selecting = true;
-                    selected.c_char_end = selected.c_char;
-                    selected.c_line_end = selected.c_line;
-                }
-
-                if (selected.c_line_end > 0) {
-                    selected.c_line_end--;
-                    selected.c_char_end = Math.min(selected.text.split("\n")[selected.c_line_end].length, selected.c_char_end);
-                } else {
-                    selected.c_char_end = 0;
-                }
-                update(selected);
-                return;
-            }
-        }
-
-        if (e.key == "ArrowLeft") {
-            selected.c_char--;
-            cap(selected.text.split("\n")[selected.c_line - 1] ? selected.text.split("\n")[selected.c_line - 1].length : 0);
-            selected.c_selecting = false;
-        } else if (e.key == "ArrowRight") {
-            selected.c_char++;
-            selected.c_selecting = false;
-            cap();
-        } else if (e.key == "ArrowDown") {
-            if (selected.c_line < selected.text.split("\n").length - 1) {
-                selected.c_line++;
-                selected.c_char = Math.min(selected.text.split("\n")[selected.c_line].length, selected.c_char);
-            } else {
-                selected.c_char = selected.text.split("\n")[selected.c_line].length;
-            }
-            selected.c_selecting = false;
         } else if (e.key == "ArrowUp") {
-            if (selected.c_line > 0) {
-                selected.c_line--;
-                selected.c_char = Math.min(selected.text.split("\n")[selected.c_line].length, selected.c_char);
-            } else {
-                selected.c_char = 0;
-            }
-            selected.c_selecting = false;
-        } else if (e.key == "Enter" || e.key == "Return") {
-            selected.history.push(selected.text, "write", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
             if (!selected.c_selecting) {
-                const toadd = selected.text.split("\n");
-                var add = 0;
-                for (var i = 0; i < selected.c_line; i++) add += toadd[i].length + 1;
-                selected.text = selected.text.substring(0, add + selected.c_char) + "\n" + selected.text.substring(add + selected.c_char);
-                selected.c_char = 0;
-                selected.c_line++;
-            } else {
-                const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
-                const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
-                selected.text = selected.text.substring(0, Math.min(lnp1, lnp2)) + "\n" + selected.text.substring(Math.max(lnp1, lnp2));
-                selected.c_line = Math.min(selected.c_line, selected.c_line_end);
-                selected.c_char = Math.min(selected.c_char, selected.c_char_end) + 1;
-                cap();
+                selected.c_selecting = true;
+                selected.c_char_end = selected.c_char;
+                selected.c_line_end = selected.c_line;
             }
 
-            selected.c_selecting = false;
-        } else if (e.key == "Backspace") {
-            selected.history.push(selected.text, "write", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
-            if (!selected.c_selecting) {
-                const toadd = selected.text.split("\n");
-                var add = 0;
-                for (var i = 0; i < selected.c_line; i++) add += toadd[i].length + 1;
-                const oldlastline = toadd[selected.c_line - 1];
-                selected.text = selected.text.substring(0, add + selected.c_char - 1) + selected.text.substring(add + selected.c_char);
-                selected.c_char--;
-                cap(oldlastline != null ? oldlastline.length : 0);
+            if (selected.c_line_end > 0) {
+                selected.c_line_end--;
+                selected.c_char_end = Math.min(selected.text.split("\n")[selected.c_line_end].length, selected.c_char_end);
             } else {
-                const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
-                const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
-                selected.text = selected.text.substring(0, Math.min(lnp1, lnp2)) + selected.text.substring(Math.max(lnp1, lnp2));
-                selected.c_line = Math.min(selected.c_line, selected.c_line_end);
-                selected.c_char = Math.min(selected.c_char, selected.c_char_end);
-                cap();
+                selected.c_char_end = 0;
             }
-            selected.c_selecting = false;
-        } else if (e.key == "Home") {
-            selected.c_char = 0;
-            selected.c_selecting = false;
-        } else if (e.key == "End") {
-            selected.c_char = selected.text.split("\n")[selected.c_line].length;
-            cap(selected.text.split("\n")[selected.c_line] ? selected.text.split("\n")[selected.c_line].length : 0);
-            selected.c_selecting = false;
-        } else if (e.key == "PageDown") {
-            selected.c_line += 20;
-            selected.c_line = clamp(selected.c_line, 0, selected.text.split("\n").length - 1);
-            selected.c_char = Math.min(selected.text.split("\n")[selected.c_line].length, selected.c_char);
-            selected.c_selecting = false;
-        } else if (e.key == "PageUp") {
-            selected.c_line -= 20;
-            selected.c_line = clamp(selected.c_line, 0, selected.text.split("\n").length - 1);
-            selected.c_char = Math.min(selected.text.split("\n")[selected.c_line].length, selected.c_char);
-            selected.c_selecting = false;
+            update(selected);
+            return;
         }
-        // actual typing
-        // checks modifiers too
-        else if (e.key.substring(0, 1) == e.key) {
-            selected.history.push(selected.text, "write", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
-            if (!selected.c_selecting) {
-                const toadd = selected.text.split("\n");
-                var add = 0;
-                for (var i = 0; i < selected.c_line; i++) add += toadd[i].length + 1;
-                selected.text = selected.text.substring(0, add + selected.c_char) + e.key + selected.text.substring(add + selected.c_char);
-                selected.c_char++;
-            } else {
-                const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
-                const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
-                selected.text = selected.text.substring(0, Math.min(lnp1, lnp2)) + e.key + selected.text.substring(Math.max(lnp1, lnp2));
-                selected.c_line = Math.min(selected.c_line, selected.c_line_end);
-                selected.c_char = Math.min(selected.c_char, selected.c_char_end) + 1;
-                cap();
-            }
-
-            selected.c_selecting = false;
-        }
-
-        update(selected);
     }
+
+    if (e.key == "ArrowLeft") {
+        selected.c_char--;
+        cap(selected.text.split("\n")[selected.c_line - 1] ? selected.text.split("\n")[selected.c_line - 1].length : 0);
+        selected.c_selecting = false;
+    } else if (e.key == "ArrowRight") {
+        selected.c_char++;
+        selected.c_selecting = false;
+        cap();
+    } else if (e.key == "ArrowDown") {
+        if (selected.c_line < selected.text.split("\n").length - 1) {
+            selected.c_line++;
+            selected.c_char = Math.min(selected.text.split("\n")[selected.c_line].length, selected.c_char);
+        } else {
+            selected.c_char = selected.text.split("\n")[selected.c_line].length;
+        }
+        selected.c_selecting = false;
+    } else if (e.key == "ArrowUp") {
+        if (selected.c_line > 0) {
+            selected.c_line--;
+            selected.c_char = Math.min(selected.text.split("\n")[selected.c_line].length, selected.c_char);
+        } else {
+            selected.c_char = 0;
+        }
+        selected.c_selecting = false;
+    } else if (e.key == "Enter" || e.key == "Return") {
+        selected.history.push(selected.text, "write", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
+        if (!selected.c_selecting) {
+            const toadd = selected.text.split("\n");
+            var add = 0;
+            for (var i = 0; i < selected.c_line; i++) add += toadd[i].length + 1;
+            selected.text = selected.text.substring(0, add + selected.c_char) + "\n" + selected.text.substring(add + selected.c_char);
+            selected.c_char = 0;
+            selected.c_line++;
+        } else {
+            const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
+            const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
+            selected.text = selected.text.substring(0, Math.min(lnp1, lnp2)) + "\n" + selected.text.substring(Math.max(lnp1, lnp2));
+            selected.c_line = Math.min(selected.c_line, selected.c_line_end);
+            selected.c_char = Math.min(selected.c_char, selected.c_char_end) + 1;
+            cap();
+        }
+
+        selected.c_selecting = false;
+    } else if (e.key == "Backspace") {
+        selected.history.push(selected.text, "write", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
+        if (!selected.c_selecting) {
+            const toadd = selected.text.split("\n");
+            var add = 0;
+            for (var i = 0; i < selected.c_line; i++) add += toadd[i].length + 1;
+            const oldlastline = toadd[selected.c_line - 1];
+            selected.text = selected.text.substring(0, add + selected.c_char - 1) + selected.text.substring(add + selected.c_char);
+            selected.c_char--;
+            cap(oldlastline != null ? oldlastline.length : 0);
+        } else {
+            const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
+            const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
+            selected.text = selected.text.substring(0, Math.min(lnp1, lnp2)) + selected.text.substring(Math.max(lnp1, lnp2));
+            selected.c_line = Math.min(selected.c_line, selected.c_line_end);
+            selected.c_char = Math.min(selected.c_char, selected.c_char_end);
+            cap();
+        }
+        selected.c_selecting = false;
+    } else if (e.key == "Home") {
+        selected.c_char = 0;
+        selected.c_selecting = false;
+    } else if (e.key == "End") {
+        selected.c_char = selected.text.split("\n")[selected.c_line].length;
+        cap(selected.text.split("\n")[selected.c_line] ? selected.text.split("\n")[selected.c_line].length : 0);
+        selected.c_selecting = false;
+    } else if (e.key == "PageDown") {
+        selected.c_line += 20;
+        selected.c_line = clamp(selected.c_line, 0, selected.text.split("\n").length - 1);
+        selected.c_char = Math.min(selected.text.split("\n")[selected.c_line].length, selected.c_char);
+        selected.c_selecting = false;
+    } else if (e.key == "PageUp") {
+        selected.c_line -= 20;
+        selected.c_line = clamp(selected.c_line, 0, selected.text.split("\n").length - 1);
+        selected.c_char = Math.min(selected.text.split("\n")[selected.c_line].length, selected.c_char);
+        selected.c_selecting = false;
+    }
+    // actual typing
+    // checks modifiers too
+    else if (e.key.substring(0, 1) == e.key) {
+        selected.history.push(selected.text, "write", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
+        if (!selected.c_selecting) {
+            const toadd = selected.text.split("\n");
+            var add = 0;
+            for (var i = 0; i < selected.c_line; i++) add += toadd[i].length + 1;
+            selected.text = selected.text.substring(0, add + selected.c_char) + e.key + selected.text.substring(add + selected.c_char);
+            selected.c_char++;
+        } else {
+            const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
+            const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
+            selected.text = selected.text.substring(0, Math.min(lnp1, lnp2)) + e.key + selected.text.substring(Math.max(lnp1, lnp2));
+            selected.c_line = Math.min(selected.c_line, selected.c_line_end);
+            selected.c_char = Math.min(selected.c_char, selected.c_char_end) + 1;
+            cap();
+        }
+
+        selected.c_selecting = false;
+    }
+
+    update(selected);
 });
 
 export default function build(container, relative) {
+    for (const lang of languages) {
+        paletteLangs.push({
+            name: lang.name,
+            identifier: lang.identifier,
+            callback: () => {
+                currentMode = lang.identifier;
+                updateLang();
+            },
+        });
+    }
+
     const $ = generate(container, relative);
     selected = $;
     update($);
 
     document.addEventListener("mousedown", function (e) {
+        closePalette();
+
         if (e.target === $.main || $.main.contains(e.target)) {
             selected = $;
             const cw = e.target.classList.contains("pheonix-cursor") ? selected.c_char : Math.round(e.offsetX / getcharwidth());
@@ -577,30 +790,33 @@ export default function build(container, relative) {
     });
 
     document.addEventListener("mousemove", function (e) {
-        if (selected) {
-            if (selected.mousedown) {
-                const cw = Math.floor(e.offsetX / getcharwidth());
-                const hw =
-                    e.target.hasAttribute("pheonix-line-num") && !e.target.hasAttribute("pheonix-preview-hint")
-                        ? e.target.getAttribute("pheonix-line-num")
-                        : selected.text.split("\n").length - 1;
-                selected.c_char_end = Math.min(cw, $.text.split("\n")[hw].length);
-                selected.c_line_end = parseInt(hw);
+        if (!selected || !selected.mousedown) return;
+        const cw = Math.floor(e.offsetX / getcharwidth());
+        const hw =
+            e.target.hasAttribute("pheonix-line-num") && !e.target.hasAttribute("pheonix-preview-hint")
+                ? e.target.getAttribute("pheonix-line-num")
+                : selected.text.split("\n").length - 1;
+        selected.c_char_end = Math.min(cw, $.text.split("\n")[hw].length);
+        selected.c_line_end = parseInt(hw);
 
-                selected.c_selecting = false;
-                if (selected.c_char_end != selected.c_char || selected.c_line_end != selected.c_line) {
-                    selected.c_selecting = true;
-                }
-
-                update(selected);
-                cap();
-            }
+        selected.c_selecting = false;
+        if (selected.c_char_end != selected.c_char || selected.c_line_end != selected.c_line) {
+            selected.c_selecting = true;
         }
+
+        update(selected);
+        cap();
     });
 
     $.addlistener("pheonix://updated", () => {
         update($);
     });
+
+    mode.innerText = currentMode;
+
+    mode.onclick = function () {
+        openPalette("language", $);
+    };
 
     return $;
 }

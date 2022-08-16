@@ -8,6 +8,8 @@
 // line - the text content of the line that needs to be highlighted
 // continues - info from the previous line for if it needs to continue something to this line (like a block comment)
 //           - continues is provided by the return at the bottom of the parse function
+// reset - tells the function if the syntax highlighting is at line 0 again, meaning it should reset any global variables
+//              that may have been set previously.
 
 // `total` should look something like this:
 // [
@@ -24,7 +26,7 @@
 // try your best to optimize it, although if you dont usually the main script can optimize for you.
 // optimizations should include connecting spaces to text so instead of just "local" you would have "local " and "x ", etc.
 
-function parse(line, continues = null) {
+function parse(line, continues = null, reset = false) {
     const total = [];
 
     var text = "";

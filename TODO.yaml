@@ -1,0 +1,34 @@
+(Planned) Language Support:
+    - C++
+    - C
+    - JavaScript
+    - TypeScript
+    - YAML
+    - JSON
+    - XML
+    - HTML
+    - CSS
+
+Extra Planned Language Support:
+    - .gitignore
+    - .gitattributes
+    - markdown
+    - lock files
+    - Roblox Lua (LuaU)
+
+Planned Features:
+    - Commands
+    - Buffer System
+
+Planned Commands:
+    - Reload
+    - Change Language Mode (CTRL + L)
+    - Close Window
+    - Open Preferences
+    - Open File
+    - Compare History
+    - Push with git
+    - Pull with git
+    - Fetch with git
+    - Sync with git
+    - Change git branch

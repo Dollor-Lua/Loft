@@ -1,0 +1,9 @@
+14.*.22:
+    -
+
+14.8.22:
+    - added CHANGELOG.yaml
+    - added command palette
+    - added ability to switch languages
+    - added plaintext as its own language
+    - added TODO.yaml

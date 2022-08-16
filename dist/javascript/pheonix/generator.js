@@ -15,6 +15,9 @@ class pheonixbox {
     cursor = null;
     hints = null;
     presentation = null;
+    palette = null;
+    paletteSearch = null;
+    paletteContainer = null;
 
     c_char = 0;
     c_char_end = 0;
@@ -65,6 +68,23 @@ class pheonixbox {
         main.classList.add("pheonix-container");
         main.style = "width: 100%; height: 100%; position: relative; top: 0px; left: 0px; transform: translate3d(0px, 0px, 0px); contain: strict;";
 
+        const palette = div();
+        palette.classList.add("pheonix-palette");
+        palette.classList.add("disabled");
+        palette.style =
+            "width: 75%; max-width: 800px; position: absolute; top: 50px; left: 50%; transform: translateX(-50%); min-height: 40px; height: fit-content;";
+
+        const paletteText = document.createElement("input");
+        paletteText.type = "text";
+        paletteText.placeholder = "Search by Command Name";
+        paletteText.classList.add("pheonix-palette-text");
+        paletteText.style =
+            "width: calc(100% - 10px); height: 30px; top: 5px; left: 5px; position: relative; background-color: #00000046; display: block; box-sizing: border-box; border: none; color: #fff; padding-left: 10px; font-size: 1.3rem; margin-bottom: 10px; outline: none;";
+
+        const paletteOptions = div();
+        paletteOptions.classList.add("pheonix-palette-options");
+        paletteOptions.style = "width: calc(100% - 10px); height: fit-content; left: 5px; position: relative;";
+
         const lines = div();
         lines.classList.add("pheonix-margin");
         lines.style = "width: 64px; height: 100%; position: absolute; contain: strict; top: 0px; transform: translate3d(0px, 0px, 0px);";
@@ -94,6 +114,9 @@ class pheonixbox {
         editor.style =
             "position: absolute; overflow: hidden; width: 1e+06px; height: 1e+06px; transform: translate3d(0px, 0px, 0px); contain: strict; top: 0px; left: 0px;";
 
+        palette.appendChild(paletteText);
+        palette.appendChild(paletteOptions);
+
         scroller.appendChild(hints);
         scroller.appendChild(presentation);
         scroller.appendChild(editor);
@@ -101,6 +124,7 @@ class pheonixbox {
         main.appendChild(lines);
         main.appendChild(scroller);
         main.appendChild(cursor);
+        main.appendChild(palette);
 
         container.appendChild(main);
 
@@ -111,6 +135,13 @@ class pheonixbox {
         this.scroller = scroller;
         this.cursor = cursor;
         this.hints = hints;
+        this.palette = palette;
+        this.paletteSearch = paletteText;
+        this.paletteContainer = paletteOptions;
+
+        palette.addEventListener("mousedown", function (e) {
+            e.stopPropagation();
+        });
     }
 }
 

@@ -112,8 +112,8 @@ function lex(line) {
         if (string) {
             text += line.charAt(i);
             if (
-                ((quoteType == 0 && line.charAt(i) == '"') ||
-                    (quoteType == 1 && line.charAt(i) == "'") ||
+                ((quoteType == 1 && line.charAt(i) == '"') ||
+                    (quoteType == 0 && line.charAt(i) == "'") ||
                     (quoteType == 2 && line.charAt(i) == "]" && line.charAt(i + 1) == "]")) &&
                 line.charAt(i - 1) != "\\"
             ) {
@@ -206,13 +206,23 @@ function parse(tokens) {
             }
         }
 
-        console.log(`DEFAULT PUSH FOR ${token[0]}, ${token[1]}`);
         total.push({ type: token[0], text: token[1] });
         previousToken = token;
     }
 }
 
-function run(line, continues = null) {
+function resetVars() {
+    total = [];
+    text = "";
+    comment = false;
+    blockComment = false;
+    quoteType = 0;
+    string = false;
+}
+
+function run(line, continues = null, reset = false) {
+    if (reset) resetVars(); // reset all variables in case of funny bug
+
     if (continues == "blockQuote") {
         quoteType = 2;
         string = true;
@@ -229,6 +239,8 @@ function run(line, continues = null) {
 
     pushTextOverride();
 
+    if (comment && !blockComment) comment = false;
+    if (string && quoteType != 2) string = false;
     return { highlights: total, continue: string && quoteType == 2 ? "blockQuote" : comment && blockComment ? "blockComment" : null };
 }
 

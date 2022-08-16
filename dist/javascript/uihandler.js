@@ -1,6 +1,5 @@
 const explorer = document.getElementById("explorer");
 const editor = document.getElementById("container");
-const consoleui = document.getElementById("console");
 const bottom = document.getElementById("info-bar");
 const container = document.getElementById("precontainer");
 

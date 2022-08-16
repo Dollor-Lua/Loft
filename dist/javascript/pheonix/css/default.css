@@ -9,3 +9,11 @@
 span {
     white-space: pre;
 }
+
+.pheonix-palette {
+    background-color: var(--background-command-palette) !important;
+}
+
+.select {
+    background-color: #ffffff22 !important;
+}

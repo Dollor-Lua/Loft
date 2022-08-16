@@ -84,9 +84,29 @@ body {
     top: 0px;
 }
 
+#dropdown {
+    position: absolute;
+    width: fit-content;
+    height: var(--titlebar-height);
+    left: 0px;
+    top: 0px;
+}
+
+#dropdown button {
+    width: fit-content;
+    padding-left: 5px;
+    padding-right: 5px;
+    margin-left: 5px;
+    background-color: #0000;
+    transition: all 0.3s ease;
+}
+
+#dropdown button:hover {
+    background-color: #ffffff44;
+}
+
 #explorer,
 #toolbar,
-#console,
 #info-bar {
     background-color: var(--background-primary);
     border: var(--border);

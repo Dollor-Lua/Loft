@@ -1,13 +1,12 @@
+document.addEventListener("contextmenu", (event) => event.preventDefault());
+
 // TAURI imports
 const { appWindow } = window.__TAURI__.window;
 
 // imports
+
+import init from "./loftenv.js";
 import build from "./pheonix/pheonix.js";
-
-var term = new Terminal();
-
-term.open(document.getElementById("terminal"));
-term.write("Hello from \x1B[1;3;31mxterm.js\x1B[0m $ ");
 
 const title = document.getElementById("title");
 const container = document.getElementById("container");
@@ -38,5 +37,11 @@ appWindow.listen("tauri://resize", () => {
     title.style = `line-height: ${title.offsetHeight}px;`;
 });
 
-const editor = build(container, "./javascript/pheonix");
-editor.set("Select a language (button in bottom right) to get started.\nStart typing to dismiss this message.", true);
+async function main() {
+    await init();
+
+    const editor = build(container, "./javascript/pheonix");
+    editor.set("Select a language (button in bottom right) to get started.\nStart typing to dismiss this message.", true);
+}
+
+main();

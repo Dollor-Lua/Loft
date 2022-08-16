@@ -1,0 +1,43 @@
+:root {
+    --text-color: #dfcfa9;
+    --hint-color: #969696;
+    --background-primary: #303030;
+    --background-editor: #303030;
+    --border: 1px solid #242424;
+    --border-color: #242424;
+    --image-color: invert(0%);
+    --cursor-color: #fff;
+
+    --test: #d67e95;
+
+    color: var(--text-color);
+}
+
+.pheonix-operator {
+    color: var(--text-color) !important;
+}
+
+.pheonix-method {
+    color: #c3c52b !important;
+}
+
+.pheonix-attribute {
+    color: #7c9b8f !important;
+}
+
+.pheonix-keyword {
+    color: #ee4836 !important;
+}
+
+.pheonix-number {
+    color: #d67e95 !important;
+}
+
+.pheonix-string {
+    color: #c3c52b !important;
+    font-style: italic !important;
+}
+
+.pheonix-comment {
+    color: #99846f !important;
+}
