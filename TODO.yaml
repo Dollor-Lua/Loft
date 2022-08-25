@@ -1,5 +1,7 @@
+ORDER:
+    - Intellisense
+
 (Planned) Language Support:
-    - C++
     - C
     - JavaScript
     - TypeScript

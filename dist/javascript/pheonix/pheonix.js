@@ -2,14 +2,17 @@
 const { dialog, fs, clipboard } = window.__TAURI__;
 
 // imports
-import { generate } from "./generator.js";
+import { generate, autocompletionResult } from "./generator.js";
 import languages from "./langs.js";
 import fuzzysort from "./external/fuzzysort.js";
 
 // languages
 var syntaxCache = {};
+var serverCache = {};
+
 var paletteLangs = [];
 var highlight = null;
+var langserver = null;
 (async () => {
     highlight = (await import("./languages/plaintext.js")).default;
 })();
@@ -42,8 +45,10 @@ var currentMode = "plaintext";
 var lastMode = "plaintext";
 
 var allowbindings = true;
+var intellishow = false;
 
 const paletteManager = new EventTarget();
+const intelliManager = new EventTarget();
 
 const fontHeight = 24;
 
@@ -201,6 +206,14 @@ export function openPalette(mode, select = selected) {
     };
 }
 
+export function getLanguage(ID) {
+    for (const lang of languages) {
+        if (lang.identifier == ID) return lang;
+    }
+
+    return null;
+}
+
 export async function updateLang() {
     mode.innerText = currentMode;
     if (lastMode != currentMode) {
@@ -208,6 +221,12 @@ export async function updateLang() {
         else {
             highlight = (await import(`./languages/${currentMode}.js`)).default;
             syntaxCache[currentMode] = highlight;
+        }
+
+        if (currentMode in serverCache) langserver = syntaxCache[currentMode];
+        else {
+            langserver = getLanguage(currentMode).server ? (await import(`./servers/${currentMode}.js`)).default : null;
+            serverCache[currentMode] = langserver;
         }
     }
     lastMode = currentMode;
@@ -297,6 +316,113 @@ export function getcharwidth() {
     return width;
 }
 
+var signalAutoComplete;
+var incAutoComplete;
+var deincAutoComplete;
+export function hideintellisense($) {
+    intellishow = false;
+
+    intelliManager.removeEventListener("signal", signalAutoComplete);
+    intelliManager.removeEventListener("increment", incAutoComplete);
+    intelliManager.removeEventListener("deincrement", deincAutoComplete);
+    $.intellisense.innerHTML = "";
+}
+
+export function intellisense($, lword) {
+    var c = false;
+    if (!$) c = true;
+    if (langserver == null) c = true;
+    if (lword.trim() == "") c = true;
+    if (!isNaN(lword)) c = true;
+
+    if (c) {
+        hideintellisense($);
+        return;
+    }
+
+    const [toffset, receive] = langserver("completion", lword);
+    hideintellisense($);
+    if (receive.length <= 0) return;
+    intellishow = true;
+
+    var btns = [];
+    var select = 0;
+
+    signalAutoComplete = (_) => {
+        btns[select].click();
+    };
+
+    incAutoComplete = (_) => {
+        select = Math.min(btns.length - 1, select + 1);
+        for (const btn of btns) btn.classList.remove("select");
+        btns[select].classList.add("select");
+    };
+
+    deincAutoComplete = (_) => {
+        select = Math.max(0, select - 1);
+        for (const btn of btns) btn.classList.remove("select");
+        btns[select].classList.add("select");
+    };
+
+    intelliManager.addEventListener("signal", signalAutoComplete);
+    intelliManager.addEventListener("increment", incAutoComplete);
+    intelliManager.addEventListener("deincrement", deincAutoComplete);
+
+    for (const comp of receive) {
+        const res = autocompletionResult(
+            fuzzysort.highlight(comp.hinfo, '<b style="font-weight:bold;color:#00ffff;">', "</b>"),
+            comp.location,
+            comp.type
+        );
+        $.intellisense.appendChild(res);
+
+        btns.push(res);
+
+        res.onclick = () => {
+            selected.history.push(selected.text, "completion", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
+
+            if (comp.type == "snippet") {
+                const writes = comp.hinfo.obj.writes;
+                const lines = writes.join("\n");
+
+                const toadd = selected.text.split("\n");
+                var add = 0;
+                for (var i = 0; i < selected.c_line; i++) add += toadd[i].length + 1;
+                selected.text =
+                    selected.text.substring(0, add + selected.c_char - lword.length + toffset) +
+                    lines +
+                    selected.text.substring(add + selected.c_char);
+                selected.c_char += comp.text.length - lword.length + toffset;
+            } else {
+                const toadd = selected.text.split("\n");
+                var add = 0;
+                for (var i = 0; i < selected.c_line; i++) add += toadd[i].length + 1;
+                selected.text =
+                    selected.text.substring(0, add + selected.c_char - lword.length + toffset) +
+                    comp.text +
+                    selected.text.substring(add + selected.c_char);
+                selected.c_char += comp.text.length - lword.length + toffset;
+            }
+
+            update($);
+            hideintellisense($);
+        };
+    }
+
+    for (const btn of btns) btn.classList.remove("select");
+    btns[select].classList.add("select");
+}
+
+export function grab(text, position) {
+    var total = [];
+    for (var i = position; i > 0; i--) {
+        if (text.charAt(i - 1).trim() == "") break;
+        total.push(text.charAt(i - 1));
+    }
+
+    return total.reverse().join("");
+}
+
 export function update($) {
     if (!$) return;
 
@@ -338,16 +464,17 @@ export function update($) {
 
         var last = null;
         for (const lc of lineContents) {
-            var span;
-            if (lc.text.trim() == "" && last) {
-                last.innerText += lc.text;
-                continue;
-            } else if (last && last.innerText.trim() == "") {
-                span = last;
-                span.className = "";
-            } else {
-                span = document.createElement("span");
-            }
+            var span = document.createElement("span");
+            // TODO: readd optimizer block
+            // if (lc.text.trim() == "" && last) {
+            //     last.innerText += lc.text;
+            //     continue;
+            //     // } else if (last && last.innerText.trim() == "") {
+            //     //     span = last;
+            //     //     span.className = "";
+            // } else {
+            //     span = document.createElement("span");
+            // }
 
             span.style = `height: ${fontHeight}px; font-size: ${
                 fontHeight - 2
@@ -376,6 +503,14 @@ export function update($) {
         $.cursor.classList.remove("disabled-t");
         $.cursor.style = `display: block; background-color: var(--cursor-color); width: 2px; height: ${fontHeight}px; position: absolute; left: 
         ${75 + width * $.c_char}px; top: ${fontHeight * $.c_line}px;`;
+
+        //
+        // INTELLISENSE POSITIONING
+        //
+
+        $.intellisense.style.left = `${100 + width * $.c_char}px`;
+        $.intellisense.style.top = `${fontHeight * ($.c_line + 1)}px`;
+        $.intellisense.style.maxHeight = `${fontHeight * 10}px`;
 
         //
         // LINE SELECTION AND LN NUM, COL NUM (X SELECTED) HANDLERS!
@@ -560,6 +695,12 @@ async function acceleratorPushed(e) {
 }
 
 document.addEventListener("keydown", async function (e) {
+    if (intellishow) {
+        if (e.key == "Enter" || e.key == "Tab") { intelliManager.dispatchEvent(new Event("signal")); e.preventDefault(); return; } // prettier-ignore
+        else if (e.key == "ArrowDown") { intelliManager.dispatchEvent(new Event("increment")); e.preventDefault(); return; } // prettier-ignore
+        else if (e.key == "ArrowUp") { intelliManager.dispatchEvent(new Event("deincrement")); e.preventDefault(); return; } // prettier-ignore
+    }
+
     if (paletteOpen) {
         if (e.key == "Escape") closePalette();
         else if (e.key == "Enter") paletteManager.dispatchEvent(new Event("signal"));
@@ -698,6 +839,10 @@ document.addEventListener("keydown", async function (e) {
             cap();
         }
         selected.c_selecting = false;
+
+        update(selected);
+        var grb = grab(selected.text.split("\n")[selected.c_line], selected.c_char);
+        intellisense(selected, grb);
     } else if (e.key == "Home") {
         selected.c_char = 0;
         selected.c_selecting = false;
@@ -715,6 +860,28 @@ document.addEventListener("keydown", async function (e) {
         selected.c_line = clamp(selected.c_line, 0, selected.text.split("\n").length - 1);
         selected.c_char = Math.min(selected.text.split("\n")[selected.c_line].length, selected.c_char);
         selected.c_selecting = false;
+    } else if (e.key == "Tab") {
+        selected.history.push(selected.text, "write", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
+        if (!selected.c_selecting) {
+            const toadd = selected.text.split("\n");
+            var add = 0;
+            for (var i = 0; i < selected.c_line; i++) add += toadd[i].length + 1;
+            selected.text = selected.text.substring(0, add + selected.c_char) + "    " + selected.text.substring(add + selected.c_char);
+            selected.c_char++;
+        } else {
+            const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
+            const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
+            selected.text = selected.text.substring(0, Math.min(lnp1, lnp2)) + "    " + selected.text.substring(Math.max(lnp1, lnp2));
+            selected.c_line = Math.min(selected.c_line, selected.c_line_end);
+            selected.c_char = Math.min(selected.c_char, selected.c_char_end) + 1;
+            cap();
+        }
+
+        selected.c_selecting = false;
+
+        update(selected);
+        var grb = grab(selected.text.split("\n")[selected.c_line], selected.c_char);
+        intellisense(selected, grb);
     }
     // actual typing
     // checks modifiers too
@@ -736,6 +903,10 @@ document.addEventListener("keydown", async function (e) {
         }
 
         selected.c_selecting = false;
+
+        update(selected);
+        var grb = grab(selected.text.split("\n")[selected.c_line], selected.c_char);
+        intellisense(selected, grb);
     }
 
     update(selected);

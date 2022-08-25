@@ -18,6 +18,7 @@ class pheonixbox {
     palette = null;
     paletteSearch = null;
     paletteContainer = null;
+    intellisense = null;
 
     c_char = 0;
     c_char_end = 0;
@@ -114,6 +115,11 @@ class pheonixbox {
         editor.style =
             "position: absolute; overflow: hidden; width: 1e+06px; height: 1e+06px; transform: translate3d(0px, 0px, 0px); contain: strict; top: 0px; left: 0px;";
 
+        const intellisense = div();
+        intellisense.classList.add("pheonix-intellisense");
+        intellisense.style =
+            "width: 350px; height: fit-content; max-height: 200px; position: absolute; left: 0px; top: 0px; overflow-y: auto; background-color: #000; border-radius: 5px; background-color: var(--autocomplete-background); box-shadow: inset 0 0 0 2px var(--autocomplete-border)"; // border: 2px solid var(--autocomplete-border);
+
         palette.appendChild(paletteText);
         palette.appendChild(paletteOptions);
 
@@ -125,6 +131,7 @@ class pheonixbox {
         main.appendChild(scroller);
         main.appendChild(cursor);
         main.appendChild(palette);
+        main.appendChild(intellisense);
 
         container.appendChild(main);
 
@@ -138,6 +145,7 @@ class pheonixbox {
         this.palette = palette;
         this.paletteSearch = paletteText;
         this.paletteContainer = paletteOptions;
+        this.intellisense = intellisense;
 
         palette.addEventListener("mousedown", function (e) {
             e.stopPropagation();
@@ -152,3 +160,31 @@ function generate(container, relative) {
 }
 
 export { generate };
+
+export function autocompletionResult(text, location, type) {
+    // TODO: add support for types
+
+    const b = document.createElement("button");
+    b.classList.add("pheonix-intellisense-button");
+    b.style =
+        "min-width: fit-content; width: 100%; height: fit-content; position: relative; font-size: 1.5rem; display: flex; flex-direction: row; flex-wrap: nowrap; outline: none; background-color: #0000; border: none;";
+
+    const img = document.createElement("img");
+    img.src = type == "snippet" ? "../resources/snippet.png" : "../resources/insertion.png";
+
+    const left = document.createElement("p");
+    left.innerHTML = text;
+    left.style =
+        "display: inline; justify-content: flex-start; height: 100%; margin-top: 0; margin-bottom: 0; text-align: center; padding-left: 5px; padding-top: 5px; padding-bottom: 5px; color: #fff;";
+
+    const right = document.createElement("p");
+    right.innerHTML = location;
+    right.style =
+        "display: inline; justify-content: flex-end; height: 100%; margin-top: 0; margin-bottom: 0; margin-left: auto; text-align: center; padding-right: 5px; padding-top: 5px; padding-bottom: 5px; color: #ffffff77;";
+
+    b.appendChild(img);
+    b.appendChild(left);
+    b.appendChild(right);
+
+    return b;
+}

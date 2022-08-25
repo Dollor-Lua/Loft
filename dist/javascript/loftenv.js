@@ -1,4 +1,5 @@
 const { invoke, os, shell } = window.__TAURI__;
+import fuzzysort from "./pheonix/external/fuzzysort.js";
 
 async function init() {
     var LOFT_OS = {
@@ -10,6 +11,7 @@ async function init() {
 
     var LOFT = {
         os: LOFT_OS,
+        sort: fuzzysort,
 
         exists: async function (path) {
             var does = false;

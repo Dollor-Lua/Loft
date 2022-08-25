@@ -8,6 +8,8 @@
     --border-color: #16161c;
     --image-color: invert(0%);
     --cursor-color: #fff;
+    --autocomplete-background: #1a1a24;
+    --autocomplete-border: #000;
 
     color: var(--text-color);
 }

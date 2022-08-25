@@ -17,3 +17,8 @@ span {
 .select {
     background-color: #ffffff22 !important;
 }
+
+.pheonix-intellisense-button:hover {
+    transition: all 0.5s ease !important;
+    background-color: #ffffff33 !important;
+}
