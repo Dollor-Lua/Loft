@@ -67,7 +67,8 @@ class pheonixbox {
 
         const main = div();
         main.classList.add("pheonix-container");
-        main.style = "width: 100%; height: 100%; position: relative; top: 0px; left: 0px; transform: translate3d(0px, 0px, 0px); contain: strict;";
+        main.style =
+            "width: 100%; height: 100%; position: relative; top: 0px; left: 0px; transform: translate3d(0px, 0px, 0px); contain: strict;";
 
         const palette = div();
         palette.classList.add("pheonix-palette");
@@ -84,11 +85,13 @@ class pheonixbox {
 
         const paletteOptions = div();
         paletteOptions.classList.add("pheonix-palette-options");
-        paletteOptions.style = "width: calc(100% - 10px); height: fit-content; left: 5px; position: relative;";
+        paletteOptions.style =
+            "width: calc(100% - 10px); height: fit-content; left: 5px; position: relative; top: 5px; margin-top: 5px;";
 
         const lines = div();
         lines.classList.add("pheonix-margin");
-        lines.style = "width: 64px; height: 100%; position: absolute; contain: strict; top: 0px; transform: translate3d(0px, 0px, 0px);";
+        lines.style =
+            "width: 64px; height: 100%; position: absolute; contain: strict; top: 0px; transform: translate3d(0px, 0px, 0px);";
 
         const cursor = div();
         cursor.classList.add("pheonix-cursor");

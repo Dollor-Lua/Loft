@@ -2,30 +2,24 @@ ORDER:
     - Intellisense
 
 (Planned) Language Support:
-    - C
-    - JavaScript
     - TypeScript
     - YAML
     - JSON
     - XML
     - HTML
     - CSS
+    - Rust
 
 Extra Planned Language Support:
     - .gitignore
     - .gitattributes
     - markdown
     - lock files
-    - Roblox Lua (LuaU)
 
 Planned Features:
-    - Commands
     - Buffer System
 
 Planned Commands:
-    - Reload
-    - Change Language Mode (CTRL + L)
-    - Close Window
     - Open Preferences
     - Open File
     - Compare History

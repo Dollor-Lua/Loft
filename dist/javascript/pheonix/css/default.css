@@ -22,3 +22,11 @@ span {
     transition: all 0.5s ease !important;
     background-color: #ffffff33 !important;
 }
+
+.pheonix-intellisense::-webkit-scrollbar {
+    width: 0px;
+}
+
+.pheonix-cursor {
+    pointer-events: none;
+}

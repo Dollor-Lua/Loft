@@ -1,5 +1,6 @@
 // TAURI imports
 const { dialog, fs, clipboard } = window.__TAURI__;
+const { appWindow } = window.__TAURI__.window;
 
 // imports
 import { generate, autocompletionResult } from "./generator.js";
@@ -38,7 +39,65 @@ const dialogFilters = [
     },
 ];
 
+/**
+ * onrun: function()
+ * @return {Array} [skipClosePalette, skipReloadLang]
+ */
+const commands = [
+    {
+        name: "Change Language",
+        identifier: "fyre.cmd.change_language",
+        accel: "Ctrl + L",
+        accelMac: "Cmd + L",
+        onrun: async function () {
+            closePalette();
+            openPalette("language");
+
+            return [true, true];
+        },
+    },
+    {
+        name: "Dev: Reload Window",
+        identifier: "fyre.dev.reload",
+        accel: "Ctrl + R",
+        accelMac: "Cmd + R",
+        onrun: async function () {
+            location.reload();
+            return [false, false];
+        },
+    },
+    {
+        name: "Close Window",
+        identifier: "fyre.cmd.close",
+        accel: "Alt + F4",
+        accelMac: "Cmd + Q",
+        onrun: async function () {
+            appWindow.close();
+            return [false, false];
+        },
+    },
+    {
+        name: "Open Folder",
+        identifier: "fyre.files.open_folder",
+        accel: "Ctrl + O",
+        accelMac: "Cmd + O",
+        onrun: async function () {
+            const folder = await dialog.open({ directory: true, multiple: false });
+            openFolder(folder);
+            return [false, false];
+        },
+    },
+];
+
+const fileContainer = document.getElementById("file-container");
+const title = document.getElementById("title");
+const cbuffer = document.getElementById("editor.current_buffer");
+const linenum = document.getElementById("editor.select");
+const mode = document.getElementById("editor.mode");
+
 // basic variables
+var currentFiles = [];
+
 var selected = null;
 var paletteOpen = false;
 var currentMode = "plaintext";
@@ -74,6 +133,12 @@ var paletteholder = null;
 var signalpalette = null;
 var incpalette = null;
 var deincpalette = null;
+
+var titleText = "";
+
+const palette = document.getElementById("palette");
+const paletteContainer = document.getElementById("palette-options");
+
 export function closePalette() {
     paletteOpen = false;
     allowbindings = true;
@@ -81,9 +146,12 @@ export function closePalette() {
     paletteManager.removeEventListener("increment", incpalette);
     paletteManager.removeEventListener("deincrement", deincpalette);
 
+    palette.classList.add("disabled");
+    title.blur();
+    title.value = "";
+    title.placeholder = titleText;
+
     if (paletteholder) {
-        paletteholder.palette.classList.add("disabled");
-        paletteholder.paletteSearch.blur();
         selected = paletteholder;
     }
 }
@@ -102,24 +170,28 @@ export function openPalette(mode, select = selected) {
     paletteOpen = true;
     allowbindings = false;
 
-    paletteholder = select;
+    titleText = title.placeholder;
+
     if (select == selected) selected = null;
-    paletteholder.palette.classList.remove("disabled");
-    paletteholder.paletteSearch.value = "";
+    palette.classList.remove("disabled");
+    palette.style.width = title.style.width;
+    title.value = "";
 
     var arr = mode;
+
+    title.focus();
 
     if (typeof mode == "string") {
         if (mode == "language") {
             arr = paletteLangs;
-            paletteholder.paletteSearch.placeholder = "Select Language Mode";
+            title.placeholder = "Select Language Mode";
         } else if (mode == "command") {
-            console.log("OPEN PALLETE W/ COMMAND");
-            paletteholder.paletteSearch.placeholder = "Search by Command Name";
+            arr = commands;
+            title.placeholder = "Search by Command Name";
         }
     }
 
-    paletteholder.paletteSearch.focus();
+    title.focus();
 
     var btns = [];
     var selected = 0;
@@ -157,12 +229,12 @@ export function openPalette(mode, select = selected) {
         const hstart = `<p style="color: #00ffff; display: inline;"><b>`;
         const hend = `</b></p>`;
 
-        const scores = fuzzysort.go(text, arr, { limit: 15, keys: ["name", "identifier"] });
+        const scores = fuzzysort.go(text, arr, { limit: 15, keys: ["name", "identifier"], all: true });
 
         const genbtn = (html, htmlDesc = undefined) => {
             const btn = document.createElement("button");
             btn.style =
-                "width: 100%; height: 20px; margin-bottom: 5px; background-color: #00000022; border: none; outline: none; color: #fff; font-size: 1.2rem; text-align: left;";
+                "width: 100%; height: 20px; margin-bottom: 5px; background-color: #00000022; border: none; outline: none; color: #fff; font-size: 1.2rem; text-align: left; border-radius: 7px;";
             btn.innerHTML = html;
 
             if (htmlDesc != undefined) {
@@ -175,25 +247,31 @@ export function openPalette(mode, select = selected) {
             return btn;
         };
 
-        paletteholder.paletteContainer.innerHTML = "";
+        paletteContainer.innerHTML = "";
         btns = [];
         for (var i = 0; i < scores.length; i++) {
+            const h = fuzzysort.highlight(scores[i][0], hstart, hend);
             const btn = genbtn(
-                fuzzysort.highlight(scores[i][0], hstart, hend),
-                mode == "language" ? fuzzysort.highlight(scores[i][1], hstart, hend) : undefined
+                h && h.trim() != "" ? h : scores[i].obj.name,
+                fuzzysort.highlight(scores[i][1], hstart, hend)
             );
 
             btns.push(btn);
 
-            paletteholder.paletteContainer.appendChild(btn);
+            paletteContainer.appendChild(btn);
 
-            const identifier = mode == "language" ? scores[i].obj.identifier : null;
-            const name = scores[i].obj.name;
+            const identifier = scores[i].obj.identifier;
 
-            btn.onclick = (_) => {
+            btn.onclick = async function (_) {
+                var sClose = false,
+                    sReload = false;
                 if (mode == "language") currentMode = identifier;
-                closePalette();
-                updateLang();
+                else if (mode == "command")
+                    for (const command of commands)
+                        if (command.identifier === identifier)
+                            if (command["onrun"] !== undefined) [sClose, sReload] = await command.onrun();
+                if (!sClose) closePalette();
+                if (!sReload) updateLang();
             };
         }
 
@@ -201,10 +279,14 @@ export function openPalette(mode, select = selected) {
     };
 
     sort("");
-    paletteholder.paletteSearch.oninput = function () {
-        sort(paletteholder.paletteSearch.value);
+    title.oninput = function () {
+        sort(title.value);
     };
 }
+
+title.onclick = () => {
+    openPalette("command");
+};
 
 export function getLanguage(ID) {
     for (const lang of languages) {
@@ -272,7 +354,8 @@ export function cap(fallback = null) {
     }
 
     if (spl[selected.c_line] == null || selected.c_char > spl[selected.c_line].length) {
-        selected.c_char = fallback != null ? fallback : spl[selected.c_line] ? spl[selected.c_line].length : spl[spl.length].length;
+        selected.c_char =
+            fallback != null ? fallback : spl[selected.c_line] ? spl[selected.c_line].length : spl[spl.length].length;
     }
 
     // for selection ends
@@ -294,20 +377,22 @@ export function cap(fallback = null) {
     }
 
     if (spl[selected.c_line_end] == null || selected.c_char_end > spl[selected.c_line_end].length) {
-        selected.c_char_end = fallback != null ? fallback : spl[selected.c_line_end] ? spl[selected.c_line_end].length : spl[spl.length - 1].length;
+        selected.c_char_end =
+            fallback != null
+                ? fallback
+                : spl[selected.c_line_end]
+                ? spl[selected.c_line_end].length
+                : spl[spl.length - 1].length;
     }
 
     update(selected);
 }
 
-const title = document.getElementById("title");
-const cbuffer = document.getElementById("editor.current_buffer");
-const linenum = document.getElementById("editor.select");
-const mode = document.getElementById("editor.mode");
-
 export function getcharwidth() {
     const exspan = document.createElement("span");
-    exspan.style = `position: absolute; display: block; top: -100px; height: ${fontHeight}px; width: fit-content; font-size: ${fontHeight - 2}px;`;
+    exspan.style = `position: absolute; display: block; top: -100px; height: ${fontHeight}px; width: fit-content; font-size: ${
+        fontHeight - 2
+    }px;`;
     exspan.innerText = "W"; // W is one of the longest characters, although this should be monospaced.
     document.body.appendChild(exspan);
     const width = exspan.getBoundingClientRect().width;
@@ -342,7 +427,7 @@ export function intellisense($, lword) {
 
     const [toffset, receive] = langserver("completion", lword);
     hideintellisense($);
-    if (receive.length <= 0) return;
+    if (receive == undefined || receive.length <= 0) return;
     intellishow = true;
 
     var btns = [];
@@ -379,10 +464,45 @@ export function intellisense($, lword) {
         btns.push(res);
 
         res.onclick = () => {
-            selected.history.push(selected.text, "completion", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
+            selected.history.push(
+                selected.text,
+                "completion",
+                selected.c_line,
+                selected.c_char,
+                selected.c_line_end,
+                selected.c_char_end
+            );
 
             if (comp.type == "snippet") {
                 const writes = comp.hinfo.obj.writes;
+
+                var gotoLine = writes.length - 1;
+                var gotoPos = writes[writes.length - 1].length;
+
+                var x = 0;
+                while (true) {
+                    for (var i = 0; i < writes.length; i++) {
+                        const reg = new RegExp(`\\{${x}\\}`);
+                        const regrep = new RegExp(`\\{${x}\\}`, "g");
+                        if (writes[i].search(reg) != -1) {
+                            gotoLine = i;
+                            gotoPos = writes[i].search(reg);
+                            writes[i] = writes[i].replace(regrep, "");
+
+                            if (x == -1) x = -3;
+
+                            x++;
+                            break;
+                        } else {
+                            if (x == -1) x = -2;
+                            if (x != -2) x = -1;
+                            break;
+                        }
+                    }
+
+                    if (x == -2) break;
+                }
+
                 const lines = writes.join("\n");
 
                 const toadd = selected.text.split("\n");
@@ -392,7 +512,8 @@ export function intellisense($, lword) {
                     selected.text.substring(0, add + selected.c_char - lword.length + toffset) +
                     lines +
                     selected.text.substring(add + selected.c_char);
-                selected.c_char += comp.text.length - lword.length + toffset;
+                selected.c_line += gotoLine;
+                selected.c_char = gotoPos;
             } else {
                 const toadd = selected.text.split("\n");
                 var add = 0;
@@ -435,13 +556,12 @@ export function update($) {
     const txt = preview ? $.previewText : $.text;
     const lines = txt.split("\n");
     $.lines.innerHTML = "";
-    $.presentation.innerHTML = "";
     for (var line = 1; line <= (preview ? 1 : lines.length); line++) {
         const d = document.createElement("div");
         d.classList.add("pheonix-line-number");
-        d.style = `text-align: right; user-select: none; width: 100%; height: ${fontHeight}px; top: ${(line - 1) * fontHeight}px; font-size: ${
-            fontHeight - 2
-        }px; position: absolute;`;
+        d.style = `text-align: right; user-select: none; width: 100%; height: ${fontHeight}px; top: ${
+            (line - 1) * fontHeight
+        }px; font-size: ${fontHeight - 2}px; position: absolute;`;
         d.innerText = line;
         $.lines.appendChild(d);
     }
@@ -455,10 +575,14 @@ export function update($) {
         // split line here to generate words
         const lined = document.createElement("span");
         lined.classList.add("pheonix-line");
-        lined.style = `width: 100%; height: ${fontHeight}px; position: absolute; top: ${l * fontHeight}px; user-select: none;`;
+        lined.style = `width: 100%; height: ${fontHeight}px; position: absolute; top: ${
+            l * fontHeight
+        }px; user-select: none;`;
         lined.setAttribute("pheonix-line-num", `${l}`);
 
-        const lineContentsPre = preview ? { highlights: [{ type: "text", text: line }] } : highlight(line, lineContinues, l == 0 ? true : false);
+        const lineContentsPre = preview
+            ? { highlights: [{ type: "text", text: line }] }
+            : highlight(line, lineContinues, l == 0 ? true : false);
         const lineContents = lineContentsPre.highlights;
         lineContinues = lineContentsPre.continue;
 
@@ -478,7 +602,9 @@ export function update($) {
 
             span.style = `height: ${fontHeight}px; font-size: ${
                 fontHeight - 2
-            }px; width: fit-content; display: inline-block; user-select: none; color: ${preview ? "var(--hint-color);" : "var(--text-color);"}`;
+            }px; width: fit-content; display: inline-block; user-select: none; color: ${
+                preview ? "var(--hint-color);" : "var(--text-color);"
+            }`;
 
             span.classList.add(`pheonix-typewrite-${lc.type}`, `pheonix-${lc.type}`);
 
@@ -523,22 +649,29 @@ export function update($) {
 
         if ($.c_selecting) {
             const lineDivs = [];
-            for (var i = 0; i < Math.max($.c_line, $.c_line_end) - Math.min($.c_line, $.c_line_end) + 1; i++) {
+            var topLine = Math.max($.c_line, $.c_line_end);
+            var bottomLine = Math.min($.c_line, $.c_line_end);
+            var topChar = Math.max($.c_char, $.c_char_end);
+            var bottomChar = Math.min($.c_line, $.c_line_end);
+
+            for (var i = 0; i < topLine - bottomLine + 1; i++) {
                 const div = document.createElement("div");
                 div.classList.add("pheonix-selection-div");
 
                 lineDivs.push(div);
             }
 
+            $.presentation.innerHTML = "";
             for (var i = 0; i < lineDivs.length; i++) {
-                const lineNum = Math.min($.c_line, $.c_line_end) + i;
+                const lineNum = bottomLine + i;
                 const element = lineDivs[i];
 
-                const minChar = Math.min($.c_line, $.c_line_end) == $.c_line_end ? $.c_char_end : $.c_char;
+                const minChar = bottomLine == $.c_line_end ? $.c_char_end : $.c_char;
                 const maxChar = minChar == $.c_char_end ? $.c_char : $.c_char_end;
 
-                if ($.text.split("\n")[lineNum]) {
-                    var elementWidth =
+                var elementWidth;
+                if (lineNum in $.text.split("\n")) {
+                    elementWidth =
                         i == 0
                             ? `${($.text.split("\n")[lineNum].length - minChar) * width}px`
                             : i == lineDivs.length - 1
@@ -553,23 +686,26 @@ export function update($) {
                     elementLeft = `left: ${Math.min($.c_char, $.c_char_end) * width}px;`;
                 }
 
+                //elementLeft = `left: 0px;`;
+                //elementWidth = `${width}px`;
+
                 element.style = `height: ${fontHeight}px; background-color: #ffffff33; top: ${
                     fontHeight * lineNum
                 }px; position: absolute; ${elementLeft}width: ${elementWidth};`;
 
                 $.presentation.appendChild(element);
             }
-        }
+        } else $.presentation.innerHTML = "";
 
         // titling, etc
 
         const spl1 = selected.file.split("/").join("\\").split("\\");
         const filename = spl1[spl1.length - 1].trim() != "" ? spl1[spl1.length - 1].trim() : "Untitled";
         if (selected.presave != selected.text) {
-            title.innerText = "• " + filename + " - Loft";
+            if (!paletteOpen) title.placeholder = "• " + filename + " - Loft ⮟";
             cbuffer.innerText = "• " + filename;
         } else {
-            title.innerText = filename + " - Loft";
+            if (!paletteOpen) title.placeholder = filename + " - Loft ⮟";
             cbuffer.innerText = filename;
         }
     } else {
@@ -620,36 +756,61 @@ async function acceleratorPushed(e) {
         }
         cap();
     } else if (e.key.toLowerCase() == "x") {
-        selected.history.push(selected.text, "cut", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
+        selected.history.push(
+            selected.text,
+            "cut",
+            selected.c_line,
+            selected.c_char,
+            selected.c_line_end,
+            selected.c_char_end
+        );
         if (selected.c_selecting) {
             const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
             const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
             await clipboard.writeText(selected.text.substring(Math.min(lnp1, lnp2), Math.max(lnp1, lnp2)));
-            selected.text = selected.text.substring(0, Math.min(lnp1, lnp2)) + selected.text.substring(Math.max(lnp1, lnp2));
+            selected.text =
+                selected.text.substring(0, Math.min(lnp1, lnp2)) + selected.text.substring(Math.max(lnp1, lnp2));
             selected.c_selecting = false;
         } else {
             await clipboard.writeText(selected.text.split("\n")[selected.c_line] + "\n");
             const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, 0);
-            const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.text.split("\n")[selected.c_line].length + 1);
+            const lnp2 = getPositionFromLineAndChar(
+                selected.text,
+                selected.c_line,
+                selected.text.split("\n")[selected.c_line].length + 1
+            );
             selected.text = selected.text.substring(0, lnp1) + selected.text.substring(lnp2);
         }
         cap();
     } else if (e.key.toLowerCase() == "v") {
         const read = await clipboard.readText();
         if (read != null) {
-            selected.history.push(selected.text, "paste", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
+            selected.history.push(
+                selected.text,
+                "paste",
+                selected.c_line,
+                selected.c_char,
+                selected.c_line_end,
+                selected.c_char_end
+            );
             if (selected.c_selecting) {
                 const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
                 const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
 
-                selected.text = selected.text.substring(0, Math.min(lnp1, lnp2)) + read + selected.text.substring(Math.max(lnp1, lnp2));
+                selected.text =
+                    selected.text.substring(0, Math.min(lnp1, lnp2)) +
+                    read +
+                    selected.text.substring(Math.max(lnp1, lnp2));
                 selected.c_line = Math.min(selected.c_line, selected.c_line_end);
                 selected.c_char = Math.min(selected.c_char, selected.c_char_end) + read.length;
             } else {
                 const toadd = selected.text.split("\n");
                 var add = 0;
                 for (var i = 0; i < selected.c_line; i++) add += toadd[i].length + 1;
-                selected.text = selected.text.substring(0, add + selected.c_char) + read + selected.text.substring(add + selected.c_char);
+                selected.text =
+                    selected.text.substring(0, add + selected.c_char) +
+                    read +
+                    selected.text.substring(add + selected.c_char);
                 selected.c_char += read.length;
             }
         }
@@ -730,7 +891,11 @@ document.addEventListener("keydown", async function (e) {
             }
 
             selected.c_char_end--;
-            cap(selected.text.split("\n")[selected.c_line_end - 1] ? selected.text.split("\n")[selected.c_line_end - 1].length : 0);
+            cap(
+                selected.text.split("\n")[selected.c_line_end - 1]
+                    ? selected.text.split("\n")[selected.c_line_end - 1].length
+                    : 0
+            );
             update(selected);
             return;
         } else if (e.key == "ArrowRight") {
@@ -753,7 +918,10 @@ document.addEventListener("keydown", async function (e) {
 
             if (selected.c_line_end < selected.text.split("\n").length - 1) {
                 selected.c_line_end++;
-                selected.c_char_end = Math.min(selected.text.split("\n")[selected.c_line_end].length, selected.c_char_end);
+                selected.c_char_end = Math.min(
+                    selected.text.split("\n")[selected.c_line_end].length,
+                    selected.c_char_end
+                );
             } else {
                 selected.c_char_end = selected.text.split("\n")[selected.c_line_end].length;
             }
@@ -768,7 +936,10 @@ document.addEventListener("keydown", async function (e) {
 
             if (selected.c_line_end > 0) {
                 selected.c_line_end--;
-                selected.c_char_end = Math.min(selected.text.split("\n")[selected.c_line_end].length, selected.c_char_end);
+                selected.c_char_end = Math.min(
+                    selected.text.split("\n")[selected.c_line_end].length,
+                    selected.c_char_end
+                );
             } else {
                 selected.c_char_end = 0;
             }
@@ -777,6 +948,7 @@ document.addEventListener("keydown", async function (e) {
         }
     }
 
+    const offset = 0; //selected.c_line == selected.c_line_end ? 0 : 1;
     if (e.key == "ArrowLeft") {
         selected.c_char--;
         cap(selected.text.split("\n")[selected.c_line - 1] ? selected.text.split("\n")[selected.c_line - 1].length : 0);
@@ -802,18 +974,31 @@ document.addEventListener("keydown", async function (e) {
         }
         selected.c_selecting = false;
     } else if (e.key == "Enter" || e.key == "Return") {
-        selected.history.push(selected.text, "write", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
+        selected.history.push(
+            selected.text,
+            "write",
+            selected.c_line,
+            selected.c_char,
+            selected.c_line_end,
+            selected.c_char_end
+        );
         if (!selected.c_selecting) {
             const toadd = selected.text.split("\n");
             var add = 0;
             for (var i = 0; i < selected.c_line; i++) add += toadd[i].length + 1;
-            selected.text = selected.text.substring(0, add + selected.c_char) + "\n" + selected.text.substring(add + selected.c_char);
+            selected.text =
+                selected.text.substring(0, add + selected.c_char) +
+                "\n" +
+                selected.text.substring(add + selected.c_char);
             selected.c_char = 0;
             selected.c_line++;
         } else {
             const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
             const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
-            selected.text = selected.text.substring(0, Math.min(lnp1, lnp2)) + "\n" + selected.text.substring(Math.max(lnp1, lnp2));
+            selected.text =
+                selected.text.substring(0, Math.min(lnp1, lnp2)) +
+                "\n" +
+                selected.text.substring(Math.max(lnp1, lnp2) + offset);
             selected.c_line = Math.min(selected.c_line, selected.c_line_end);
             selected.c_char = Math.min(selected.c_char, selected.c_char_end) + 1;
             cap();
@@ -821,19 +1006,28 @@ document.addEventListener("keydown", async function (e) {
 
         selected.c_selecting = false;
     } else if (e.key == "Backspace") {
-        selected.history.push(selected.text, "write", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
+        selected.history.push(
+            selected.text,
+            "write",
+            selected.c_line,
+            selected.c_char,
+            selected.c_line_end,
+            selected.c_char_end
+        );
         if (!selected.c_selecting) {
             const toadd = selected.text.split("\n");
             var add = 0;
             for (var i = 0; i < selected.c_line; i++) add += toadd[i].length + 1;
             const oldlastline = toadd[selected.c_line - 1];
-            selected.text = selected.text.substring(0, add + selected.c_char - 1) + selected.text.substring(add + selected.c_char);
+            selected.text =
+                selected.text.substring(0, add + selected.c_char - 1) + selected.text.substring(add + selected.c_char);
             selected.c_char--;
             cap(oldlastline != null ? oldlastline.length : 0);
         } else {
             const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
             const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
-            selected.text = selected.text.substring(0, Math.min(lnp1, lnp2)) + selected.text.substring(Math.max(lnp1, lnp2));
+            selected.text =
+                selected.text.substring(0, Math.min(lnp1, lnp2)) + selected.text.substring(Math.max(lnp1, lnp2));
             selected.c_line = Math.min(selected.c_line, selected.c_line_end);
             selected.c_char = Math.min(selected.c_char, selected.c_char_end);
             cap();
@@ -861,19 +1055,33 @@ document.addEventListener("keydown", async function (e) {
         selected.c_char = Math.min(selected.text.split("\n")[selected.c_line].length, selected.c_char);
         selected.c_selecting = false;
     } else if (e.key == "Tab") {
-        selected.history.push(selected.text, "write", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
+        e.preventDefault();
+        selected.history.push(
+            selected.text,
+            "write",
+            selected.c_line,
+            selected.c_char,
+            selected.c_line_end,
+            selected.c_char_end
+        );
         if (!selected.c_selecting) {
             const toadd = selected.text.split("\n");
             var add = 0;
             for (var i = 0; i < selected.c_line; i++) add += toadd[i].length + 1;
-            selected.text = selected.text.substring(0, add + selected.c_char) + "    " + selected.text.substring(add + selected.c_char);
-            selected.c_char++;
+            selected.text =
+                selected.text.substring(0, add + selected.c_char) +
+                "    " +
+                selected.text.substring(add + selected.c_char);
+            selected.c_char += 4;
         } else {
             const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
             const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
-            selected.text = selected.text.substring(0, Math.min(lnp1, lnp2)) + "    " + selected.text.substring(Math.max(lnp1, lnp2));
+            selected.text =
+                selected.text.substring(0, Math.min(lnp1, lnp2)) +
+                "    " +
+                selected.text.substring(Math.max(lnp1, lnp2) + offset);
             selected.c_line = Math.min(selected.c_line, selected.c_line_end);
-            selected.c_char = Math.min(selected.c_char, selected.c_char_end) + 1;
+            selected.c_char = Math.min(selected.c_char, selected.c_char_end) + 4;
             cap();
         }
 
@@ -886,17 +1094,30 @@ document.addEventListener("keydown", async function (e) {
     // actual typing
     // checks modifiers too
     else if (e.key.substring(0, 1) == e.key) {
-        selected.history.push(selected.text, "write", selected.c_line, selected.c_char, selected.c_line_end, selected.c_char_end);
+        selected.history.push(
+            selected.text,
+            "write",
+            selected.c_line,
+            selected.c_char,
+            selected.c_line_end,
+            selected.c_char_end
+        );
         if (!selected.c_selecting) {
             const toadd = selected.text.split("\n");
             var add = 0;
             for (var i = 0; i < selected.c_line; i++) add += toadd[i].length + 1;
-            selected.text = selected.text.substring(0, add + selected.c_char) + e.key + selected.text.substring(add + selected.c_char);
+            selected.text =
+                selected.text.substring(0, add + selected.c_char) +
+                e.key +
+                selected.text.substring(add + selected.c_char);
             selected.c_char++;
         } else {
             const lnp1 = getPositionFromLineAndChar(selected.text, selected.c_line, selected.c_char);
             const lnp2 = getPositionFromLineAndChar(selected.text, selected.c_line_end, selected.c_char_end);
-            selected.text = selected.text.substring(0, Math.min(lnp1, lnp2)) + e.key + selected.text.substring(Math.max(lnp1, lnp2));
+            selected.text =
+                selected.text.substring(0, Math.min(lnp1, lnp2)) +
+                e.key +
+                selected.text.substring(Math.max(lnp1, lnp2) + offset);
             selected.c_line = Math.min(selected.c_line, selected.c_line_end);
             selected.c_char = Math.min(selected.c_char, selected.c_char_end) + 1;
             cap();
@@ -911,6 +1132,76 @@ document.addEventListener("keydown", async function (e) {
 
     update(selected);
 });
+
+function genFileObject(path, type, open = false) {
+    const div = document.createElement("button");
+    div.classList.add("file");
+    div.name = path;
+    div.type = type;
+
+    // const tab = document.createElement("span");
+    // tab.classList.add("file-tab");
+
+    var iconimg = type == "file" ? "./resources/file-white.png" : "./resources/folder-white.png";
+
+    var arrow = null;
+    if (type == "dir") {
+        arrow = document.createElement("img");
+        arrow.classList.add("file-icon");
+        arrow.src = `./resources/${open ? "arrow-down" : "arrow-right"}.png`;
+    }
+
+    const icon = document.createElement("img");
+    icon.classList.add("file-icon");
+    icon.src = iconimg;
+
+    const txt = document.createElement("span");
+    txt.classList.add("file-text");
+    txt.innerText = path.split("/").pop();
+
+    const marker = document.createElement("span");
+    marker.classList.add("git-marker", "git-modified");
+    marker.innerText = "M";
+
+    if (arrow) div.appendChild(arrow);
+    div.append(icon, txt, marker);
+
+    return div;
+}
+
+async function indexFolder() {
+    currentFiles.innerHTML = "";
+    if (currentFiles.length > 0) document.getElementById("no-working-dir").classList.add("disabled");
+    else {
+        document.getElementById("no-working-dir").classList.remove("disabled");
+        return;
+    }
+
+    // folders first
+    const exclude = [".git"];
+    for (const file of currentFiles) {
+        if (file.children && !exclude.includes(file.name)) {
+            const obj = genFileObject(file.name, "dir");
+            fileContainer.appendChild(obj);
+        }
+    }
+
+    // then files
+    for (const file of currentFiles) {
+        if (!file.children) {
+            const obj = genFileObject(file.name, "file");
+            fileContainer.appendChild(obj);
+        }
+    }
+}
+
+async function openFolder(path) {
+    if (path == null) return;
+
+    const entries = await fs.readDir(path, { recursive: false });
+    currentFiles = entries;
+    indexFolder();
+}
 
 export default function build(container, relative) {
     for (const lang of languages) {
@@ -933,7 +1224,11 @@ export default function build(container, relative) {
 
         if (e.target === $.main || $.main.contains(e.target)) {
             selected = $;
-            const cw = e.target.classList.contains("pheonix-cursor") ? selected.c_char : Math.round(e.offsetX / getcharwidth());
+            const rect = selected.editor.getBoundingClientRect();
+
+            const cw = e.target.classList.contains("pheonix-cursor")
+                ? selected.c_char
+                : Math.round((e.clientX - rect.x) / getcharwidth());
             const hw =
                 e.target.hasAttribute("pheonix-line-num") && !e.target.hasAttribute("pheonix-preview-hint")
                     ? e.target.getAttribute("pheonix-line-num")
@@ -942,6 +1237,8 @@ export default function build(container, relative) {
                     : selected.text.split("\n").length - 1;
             selected.c_char = Math.min(cw, $.text.split("\n")[parseInt(hw)].length);
             selected.c_line = parseInt(hw);
+            selected.c_char_end = selected.c_char;
+            selected.c_line_end = selected.c_line;
 
             selected.c_selecting = false;
             update(selected);
@@ -962,13 +1259,16 @@ export default function build(container, relative) {
 
     document.addEventListener("mousemove", function (e) {
         if (!selected || !selected.mousedown) return;
-        const cw = Math.floor(e.offsetX / getcharwidth());
+        const rect = selected.editor.getBoundingClientRect();
+
+        const cw = Math.round((e.clientX - rect.x) / getcharwidth());
         const hw =
             e.target.hasAttribute("pheonix-line-num") && !e.target.hasAttribute("pheonix-preview-hint")
                 ? e.target.getAttribute("pheonix-line-num")
                 : selected.text.split("\n").length - 1;
-        selected.c_char_end = Math.min(cw, $.text.split("\n")[hw].length);
-        selected.c_line_end = parseInt(hw);
+        const ncw = Math.min(cw, $.text.split("\n")[hw].length);
+        selected.c_char = ncw;
+        selected.c_line = parseInt(hw);
 
         selected.c_selecting = false;
         if (selected.c_char_end != selected.c_char || selected.c_line_end != selected.c_line) {

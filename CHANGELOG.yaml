@@ -1,5 +1,22 @@
-14.*.22:
-    -
+# FORMAT:
+# DATES: DD.MM.YY
+# FULL:
+#### DATE:
+####     - CHANGELOG
+
+14.9.22:
+    - fixed selection bug 2 (replacement misses last character)
+    - fixed tab selecting exit button bug
+    - removed scroll bar from intellisense
+    - made snippets position properly (at "{0}" or the end of the snippet's last line)
+
+13.9.22:
+    - fixed selection bug 1
+    - selecting now places the caret where the cursor is dragging
+
+12.9.22:
+    - added C support
+    - fixed Lua highlight bug
 
 14.8.22:
     - added CHANGELOG.yaml

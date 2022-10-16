@@ -14,7 +14,7 @@ const close = document.getElementById("close");
 const maximize = document.getElementById("maximize");
 const minimize = document.getElementById("minimize");
 
-title.innerText = "• Untitled - Loft";
+title.innerText = "• Untitled - Loft ⮟";
 title.style = `line-height: ${title.offsetHeight}px;`;
 
 var maximized = true;
@@ -41,7 +41,10 @@ async function main() {
     await init();
 
     const editor = build(container, "./javascript/pheonix");
-    editor.set("Select a language (button in bottom right) to get started.\nStart typing to dismiss this message.", true);
+    editor.set(
+        "Select a language (button in bottom right) to get started.\nStart typing to dismiss this message.",
+        true
+    );
 }
 
 main();

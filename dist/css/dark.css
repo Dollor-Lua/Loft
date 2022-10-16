@@ -5,6 +5,7 @@
     --background-editor: #1f2029;
     --background-command-palette: #2f313d;
     --border: 1px solid #16161c;
+    --border-alt: 2px solid #333;
     --border-color: #16161c;
     --image-color: invert(0%);
     --cursor-color: #fff;
@@ -48,4 +49,9 @@
 
 .pheonix-macro {
     color: #ee4836 !important;
+}
+
+.git-modified {
+    color: #85ff85;
+    /* color: #85f; */
 }
