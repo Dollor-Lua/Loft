@@ -168,7 +168,7 @@ function lex(line) {
             text += '"';
         } else if (line.charAt(i) == " ") {
             text += " ";
-            if (keywords.includes(text.trim())) {
+            if (keywords.includes(text.trim()) || !isNaN(text.trim())) {
                 updateTokens();
             }
         } else {

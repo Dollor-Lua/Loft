@@ -66,7 +66,7 @@ const snippets = [
         writes: [
             // prettier-ignore
             "for i=1, 10, 1 do",
-            "    ",
+            "    {0}",
             "end",
         ],
     },
@@ -75,7 +75,7 @@ const snippets = [
         writes: [
             // prettier-ignore
             "for i, v in ipairs() do",
-            "    ",
+            "    {0}",
             "end",
         ],
     },
@@ -84,7 +84,7 @@ const snippets = [
         writes: [
             // prettier-ignore
             "for i, v in pairs() do",
-            "    ",
+            "    {0}",
             "end",
         ],
     },

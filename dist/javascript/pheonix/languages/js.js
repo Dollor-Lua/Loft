@@ -11,206 +11,58 @@ var comment = false;
 var blockComment = false;
 var quoteType = 0;
 var string = false;
-var preprocessor = false;
 
 const operators = "-+[]{}~=^*/%()<>?:;,.&|";
 const keywords = [
-    "alignas",
-    "alignof",
-    "and",
-    "and_eq",
-    "auto",
-    "bitand",
-    "bitor",
-    "bool",
+    "arguments",
+    "await",
     "break",
     "case",
     "catch",
-    "char",
-    "char8_t",
-    "char16_t",
-    "char32_t",
     "class",
-    "compl",
-    "concept",
     "const",
-    "consteval",
-    "constexpr",
-    "constinit",
-    "const_cast",
     "continue",
-    "co_await",
-    "co_return",
-    "co_yield",
-    "decltype",
+    "debugger",
     "default",
     "delete",
     "do",
-    "double",
-    "dynamic_cast",
     "else",
     "enum",
-    "explicit",
+    "eval",
     "export",
-    "extern",
+    "extends",
     "false",
-    "float",
+    "finally",
     "for",
-    "friend",
-    "goto",
+    "function",
     "if",
-    "inline",
-    "int",
-    "long",
-    "mutable",
-    "namespace",
+    "implements",
+    "import",
+    "in",
+    "instanceof",
+    "interface",
+    "let",
     "new",
-    "noexcept",
-    "not",
-    "not_eq",
-    "nullptr",
-    "operator",
-    "or",
-    "or_eq",
+    "null",
+    "package",
     "private",
     "protected",
     "public",
-    "register",
-    "reinterpret_cast",
-    "requires",
     "return",
-    "return",
-    "short",
-    "signed",
-    "sizeof",
     "static",
-    "static_assert",
-    "static_cast",
-    "struct",
+    "super",
     "switch",
-    "template",
     "this",
-    "thread_local",
     "throw",
     "true",
     "try",
-    "typedef",
-    "typeid",
-    "typename",
-    "union",
-    "unsigned",
-    "using",
-    "virtual",
+    "typeof",
+    "undefined",
+    "var",
     "void",
-    "volatile",
-    "wchar_t",
     "while",
-    "xor",
-    "xor_eq",
-];
-const preprocessors = [
-    "if",
-    "elif",
-    "else",
-    "endif",
-    "ifdef",
-    "ifndef",
-    "elifdef",
-    "elifndef",
-    "define",
-    "undef",
-    "include",
-    "line",
-    "error",
-    "warning",
-    "pragma",
-    "defined",
-    "__has_include",
-    "__has_cpp_attribute",
-    "export",
-    "import",
-    "module",
-];
-const preprocessorLeveled = ["_Pragma", "__pragma", "__declspec"];
-const preprocessorKeywords = [
-    // DECLSPEC
-    "align",
-    "allocate",
-    "allocator",
-    "code_seg",
-    "deprecated",
-    "dllimport",
-    "dllexport",
-    "empty_bases",
-    "jitintrinsic",
-    "naked",
-    "noalias",
-    "noinline",
-    "noreturn",
-    "nothrow",
-    "novtable",
-    "no_sanitize_address",
-    "process",
-    "property",
-    "restrict",
-    "safebuffers",
-    "selectany",
-    "spectre",
-    "thread",
-    "uuid",
-
-    // STANDARD
-    "once",
-    "startup",
-    "exit",
-    "warn",
-    // GCC
-    "GCC poison",
-    "GCC dependency",
-    "GCC system_header",
-    // MSVC
-    "alloc_text",
-    "auto_inline",
-    "bss_seg",
-    "check_stack",
-    "code_seg",
-    "component",
-    "comment",
-    "conform",
-    "const_seg",
-    "data_seg",
-    "deprecated",
-    "detect_mismatch",
-    "endregion",
-    "fenv_access",
-    "float_control",
-    "fp_contract",
-    "function",
-    "hdrstop",
-    "include_alias",
-    "init_seg",
-    "inline_depth",
-    "inline_recursion",
-    "instrinsic",
-    "loop",
-    "make_public",
-    "managed",
-    "message",
-    "omp",
-    "optimize",
-    "pack",
-    "pointers_to_members",
-    "pop_macro",
-    "push_macro",
-    "region",
-    "runtime_checks",
-    "section",
-    "setlocale",
-    "strict_gs_check",
-    "system_header",
-    "unmanaged",
-    "vtordisp",
-    "warning",
+    "with",
+    "yield",
 ];
 
 const pushText = (override = null, color = null) => {
@@ -226,11 +78,7 @@ const pushText = (override = null, color = null) => {
 };
 
 const pushTextOverride = () => {
-    if (preprocessors.includes(text.substring(1).trim())) {
-        pushText("macro");
-    } else if (preprocessorLeveled.includes(text.trim())) {
-        pushText("macro");
-    } else if (keywords.includes(text.trim())) {
+    if (keywords.includes(text.trim())) {
         pushText("keyword");
     } else if (!isNaN(text.trim())) {
         pushText("number");
@@ -247,17 +95,7 @@ function lex(line) {
     const tokens = [];
 
     const updateTokens = () => {
-        if (preprocessors.includes(text.substring(1).trim())) {
-            tokens.push(["macro", text]);
-            text = "";
-        } else if (preprocessorLeveled.includes(text.trim())) {
-            preprocessor = true;
-            tokens.push(["macro", text]);
-            text = "";
-        } else if (preprocessor && preprocessorKeywords.includes(text.trim())) {
-            tokens.push(["keyword", text]);
-            text = "";
-        } else if (keywords.includes(text.trim())) {
+        if (keywords.includes(text.trim())) {
             tokens.push(["keyword", text]);
             text = "";
         } else if (!isNaN(text.trim())) {
@@ -298,7 +136,7 @@ function lex(line) {
             if (
                 ((quoteType == 1 && line.charAt(i) == '"') ||
                     (quoteType == 0 && line.charAt(i) == "'") ||
-                    (quoteType == 2 && line.charAt(i) == ">")) &&
+                    (quoteType == 2 && line.charAt(i) == "`")) &&
                 line.charAt(i - 1) != "\\"
             ) {
                 string = false;
@@ -310,14 +148,6 @@ function lex(line) {
 
         if (operators.includes(line.charAt(i))) {
             updateTokens();
-
-            if (preprocessor && line.charAt(i) == "<") {
-                updateTokens();
-                quoteType = 2;
-                string = true;
-                text += "<";
-                continue;
-            }
 
             if (line.charAt(i) == "/" && line.charAt(i + 1) == "/") {
                 comment = true;
@@ -345,18 +175,16 @@ function lex(line) {
             quoteType = 1;
             string = true;
             text += '"';
+        } else if (line.charAt(i) == "`") {
+            updateTokens();
+            quoteType = 2;
+            string = true;
+            text += "`";
         } else if (line.charAt(i) == " ") {
             text += " ";
-            if (
-                keywords.includes(text.trim()) ||
-                preprocessorLeveled.includes(text.trim()) ||
-                preprocessors.includes(text.substring(1).trim())
-            ) {
+            if (keywords.includes(text.trim())) {
                 updateTokens();
             }
-        } else if (line.charAt(i) == "#") {
-            preprocessor = true;
-            text += "#";
         } else {
             text += line.charAt(i);
         }
@@ -425,7 +253,6 @@ function resetVars() {
     blockComment = false;
     quoteType = 0;
     string = false;
-    preprocessor = false;
 }
 
 function run(line, continues = null, reset = false) {
@@ -445,7 +272,6 @@ function run(line, continues = null, reset = false) {
     pushTextOverride();
 
     if (comment && !blockComment) comment = false;
-    preprocessor = false;
     return { highlights: total, continue: comment && blockComment ? "blockComment" : null };
 }
 
