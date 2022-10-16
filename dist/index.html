@@ -11,10 +11,28 @@
     <body>
         <div id="precontainer">
             <div id="container"></div>
-            <div id="explorer"></div>
+            <div id="explorer">
+                <p id="no-working-dir">
+                    You haven't opened a project yet. You can open a project by going to File > Open
+                </p>
+                <div id="file-container">
+                    <!-- <div class="file" type="file" name="D:/dev/Loft/dist/index.html">
+                        <span class="file-tab"></span>
+                        <img class="file-icon" src="" />
+                        <span class="file-text">index.html</span>
+                        <span class="git-marker git-modified">M</span>
+                    </div> -->
+                </div>
+            </div>
+            <div id="expl-tab">
+                <button id="explorer-tab" class="left-sq-tab tab-selected"></button>
+                <button id="git-tab" class="left-sq-tab"></button>
+                <button id="search-tab" class="left-sq-tab"></button>
+            </div>
         </div>
         <div id="toolbar">
-            <p id="title">Loft - Untitled</p>
+            <img id="icon" src="./resources/icon-txt.png" />
+            <input id="title" placeholder="Loft - Untitled ⮟" />
             <div id="dragger" data-tauri-drag-region></div>
             <div id="dropdown"></div>
             <button id="minimize"><img src="./resources/minimize.png" alt="-" /></button>
@@ -33,5 +51,8 @@
             </div>
         </div>
         <div id="terminal"></div>
+        <div id="palette" class="disabled">
+            <div id="palette-options"></div>
+        </div>
     </body>
 </html>

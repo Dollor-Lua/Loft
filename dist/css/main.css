@@ -19,6 +19,9 @@ body {
 #toolbar {
     width: 100%;
     height: var(--titlebar-height);
+    z-index: 2;
+    position: absolute;
+    border-bottom: var(--border-alt) !important;
 }
 
 #toolbar #close {
@@ -66,14 +69,42 @@ body {
 }
 
 #title {
+    line-height: calc(var(--titlebar-height) - 8px);
     left: 50%;
-    transform: translateX(-50%);
-    position: relative;
+    position: absolute;
     width: fit-content;
-    height: 100%;
-    /* line-height: 100%; // moved into main.js */
+    min-width: 30%;
+    height: calc(100% - 8px);
+    color: #fff;
     font-size: 15px;
     margin: 0;
+    top: 4px;
+    background-color: var(--background-editor);
+    border: none;
+    border-radius: 5px;
+    outline: none;
+    text-align: center;
+    translate: -50% 0%;
+    z-index: 3;
+    transition: all 0.4s ease;
+}
+
+#title:hover {
+    filter: brightness(1.4);
+    -webkit-filter: brightness(1.4);
+}
+
+input#title::placeholder,
+input#title::-webkit-input-placeholder {
+    color: #fff;
+}
+
+#icon {
+    height: calc(100% - 10px);
+    aspect-ratio: 2/1;
+    left: 5px;
+    top: 5px;
+    position: absolute;
 }
 
 #dragger {
@@ -201,4 +232,144 @@ body {
 .right-items div,
 .left-items div {
     line-height: 26px;
+}
+
+#expl-tab {
+    left: 0px;
+    height: 30px;
+    top: 0px;
+    position: absolute;
+    background-color: var(--background-primary);
+    display: flex;
+    justify-content: center;
+    border: var(--border-alt);
+}
+
+.left-sq-tab {
+    height: 90%;
+    aspect-ratio: 1/1;
+    top: 5%;
+    position: relative;
+    border: none;
+    background-color: #0000;
+    color: #fff;
+    font-size: 1.5rem;
+    transition: all 0.2s ease;
+    margin-left: 5px;
+    margin-right: 5px;
+}
+
+.tab-selected {
+    border-bottom: 2px solid #fff;
+}
+
+#explorer-tab {
+    background: url(../resources/file-white.png);
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+}
+
+#git-tab {
+    background: url(../resources/git-white.png);
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+}
+
+#search-tab {
+    background: url(../resources/search-white.png);
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+}
+
+#no-working-dir {
+    position: absolute;
+    padding-left: 10px;
+    padding-right: 10px;
+    font-size: 1.2rem;
+    color: #888;
+    font-weight: bold;
+    top: 0px;
+    left: 0px;
+}
+
+#palette {
+    width: 30%;
+    max-width: 800px;
+    position: absolute;
+    top: var(--titlebar-height);
+    left: 50%;
+    transform: translateX(-50%);
+    height: fit-content;
+    background-color: var(--background-command-palette);
+    border-radius: 5px;
+}
+
+#palette-options {
+    width: calc(100% - 10px);
+    height: fit-content;
+    left: 5px;
+    position: relative;
+    top: 5px;
+    margin-bottom: 5px;
+}
+
+#file-container {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 12px;
+    left: 0px;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.file {
+    height: 20px;
+    width: 100%;
+    background-color: #0000;
+    position: relative;
+    margin-top: 3px;
+    display: block;
+    text-align: left;
+    border: none;
+    outline: none;
+    color: #fff;
+    transition: all 0.2s ease;
+}
+
+.file:hover {
+    background-color: #fff3;
+}
+
+.file-tab {
+    width: 30px;
+    height: 100%;
+    display: inline-block;
+}
+
+.file-icon {
+    height: 100%;
+    aspect-ratio: 1/1;
+    display: inline-block;
+}
+
+.file-text {
+    margin-left: 5px;
+    width: fit-content;
+    height: 100%;
+    display: inline-block;
+    font-size: 1.2rem;
+}
+
+.git-marker {
+    position: absolute;
+    right: 10px;
+    top: 0px;
+    display: inline-block;
+    font-size: 1.2rem;
+    height: 20px;
 }
